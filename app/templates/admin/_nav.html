@@ -1,0 +1,7 @@
+<nav class="admin-tabs">
+  <a class="{{ 'active' if request.endpoint == 'admin.dashboard' }}" href="{{ url_for('admin.dashboard') }}"><i class="bi bi-speedometer2"></i>Обзор</a>
+  <a class="{{ 'active' if 'student' in request.endpoint }}" href="{{ url_for('admin.students') }}"><i class="bi bi-people"></i>Студенты</a>
+  <a class="{{ 'active' if 'event' in request.endpoint }}" href="{{ url_for('admin.events') }}"><i class="bi bi-calendar-event"></i>События</a>
+  <a class="{{ 'active' if 'schedule' in request.endpoint }}" href="{{ url_for('admin.schedule') }}"><i class="bi bi-journal-text"></i>Расписание</a>
+  <a class="{{ 'active' if 'tag' in request.endpoint }}" href="{{ url_for('admin.tags') }}"><i class="bi bi-tags"></i>Метки</a>
+</nav>

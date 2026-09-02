@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Вход — Student Dashboard{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block content %}
+<main class="login-shell">
+  <section class="login-brand-panel">
+    <div class="login-brand"><span class="brand-mark brand-mark-lg"><i class="bi bi-mortarboard-fill"></i></span><span>Student Dashboard</span></div>
+    <div class="login-message">
+      <span class="eyebrow">Всё важное — в одном месте</span>
+      <h1>Учебная неделя<br>без лишнего шума.</h1>
+      <p>Расписание, дедлайны, заметки и вся группа на одном спокойном экране.</p>
+      <div class="login-preview">
+        <div class="preview-top"><span></span><span></span><span></span></div>
+        <div class="preview-row"><div class="preview-person"></div><div></div><div class="active"></div><div></div><div></div></div>
+        <div class="preview-row"><div class="preview-person short"></div><div></div><div></div><div></div><div class="hot"></div></div>
+        <div class="preview-row"><div class="preview-person"></div><div class="active violet"></div><div></div><div></div><div></div></div>
+      </div>
+    </div>
+    <small>Планируйте вместе. Успевайте больше.</small>
+  </section>
+  <section class="login-form-panel">
+    <button class="nav-icon border-0 login-theme" id="themeToggle" type="button"><i class="bi bi-moon-stars"></i></button>
+    <div class="login-card">
+      <span class="mobile-brand brand-mark"><i class="bi bi-mortarboard-fill"></i></span>
+      <p class="eyebrow">С возвращением</p>
+      <h2>Войти в пространство группы</h2>
+      <p class="text-secondary mb-4">Используйте фамилию в качестве логина.</p>
+      <form method="post" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="mb-3"><label class="form-label">{{ form.login.label.text }}</label>{{ form.login(class="form-control form-control-lg", placeholder="Ivanov", autofocus=true) }}{% for e in form.login.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}</div>
+        <div class="mb-3"><label class="form-label">{{ form.password.label.text }}</label><div class="password-wrap">{{ form.password(class="form-control form-control-lg", placeholder="••••••••") }}<button type="button" data-password-toggle><i class="bi bi-eye"></i></button></div></div>
+        <div class="form-check mb-4">{{ form.remember(class="form-check-input") }} {{ form.remember.label(class="form-check-label") }}</div>
+        {{ form.submit(class="btn btn-primary btn-lg w-100") }}
+      </form>
+      <p class="login-help"><i class="bi bi-info-circle"></i> Первый пароль выдаёт администратор группы.</p>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script>document.querySelector('[data-password-toggle]')?.addEventListener('click',e=>{const i=document.getElementById('password');i.type=i.type==='password'?'text':'password';e.currentTarget.firstElementChild.className=i.type==='password'?'bi bi-eye':'bi bi-eye-slash'})</script>{% endblock %}

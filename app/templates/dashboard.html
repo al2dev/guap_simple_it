@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Календарь — Student Dashboard{% endblock %}
+{% block content %}
+<main class="dashboard-wrap">
+  <header class="calendar-toolbar">
+    <div><p class="eyebrow mb-1">{{ current_user.group_name }}</p><h1 class="h3 mb-0">Календарь группы</h1></div>
+    <div class="date-navigation">
+      <button class="btn btn-soft" type="button" data-scroll-today><i class="bi bi-crosshair me-1"></i>Сегодня</button>
+      <strong class="month-title" data-visible-month>Календарь</strong>
+    </div>
+    <div class="view-switch btn-group" role="group">
+      <button type="button" class="btn {{ 'active' if view == '7' }}" data-calendar-scale="7">Неделя</button>
+      <button type="button" class="btn {{ 'active' if view == '14' }}" data-calendar-scale="14">2 недели</button>
+      <button type="button" class="btn {{ 'active' if view == '30' }}" data-calendar-scale="30">Месяц</button>
+    </div>
+  </header>
+
+  <section class="calendar-card">
+    <div class="calendar-scroll">
+      <table class="calendar-table">
+        <thead><tr><th class="student-column"><span class="text-secondary fw-medium">Студенты</span><span class="student-count">{{ students|length }}</span></th>
+          {% for day in days %}
+          {% set day_schedule = schedule_by_date.get(day, []) %}
+          <th class="day-heading {{ 'today' if day == today }} {{ 'has-schedule' if day_schedule }}" data-schedule-date="{{ day.isoformat() }}" tabindex="0" title="{{ 'Открыть расписание и события' if current_user.is_admin else 'Открыть расписание' }}">
+            <span>{{ ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][day.weekday()] }}</span><strong>{{ day.day }}</strong>
+            {% if day_schedule %}<small><i class="bi bi-circle-fill"></i> {{ day_schedule|length }} {{ 'пара' if day_schedule|length == 1 else 'пары' }}</small>{% endif %}
+          </th>{% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for student in students %}<tr>
+          <th class="student-column">
+            <div class="student-card" data-bs-toggle="tooltip" title="Логин: {{ student.login }}">
+              {% if student.avatar %}<img src="{{ url_for('main.avatar', filename=student.avatar) }}" alt="">{% else %}<span class="avatar-initials">{{ student.initials }}</span>{% endif %}
+              <span><strong>{{ student.last_name }} {{ student.first_name }}</strong><small>{{ student.group_name }}{% if student.id == current_user.id %} · Вы{% endif %}</small></span>
+            </div>
+          </th>
+          {% for day in days %}
+            {% set day_events = events_by_date.get(day, []) %}
+            {% set day_schedule = schedule_by_date.get(day, []) %}
+            <td class="calendar-cell {{ 'own-cell' if student.id == current_user.id }} {{ 'has-schedule' if day_schedule }}" data-student-id="{{ student.id }}" data-date="{{ day.isoformat() }}" tabindex="0">
+              <div class="cell-content"><span class="cell-plus"><i class="bi bi-plus"></i></span>
+              <span data-event-indicator>{% if day_events %}<span class="event-dot" style="--dot-color:{{ day_events[0].color }}" title="{{ day_events[0].title }}"></span>{% endif %}</span>
+              <span class="cell-tag-dots" data-cell-dots></span></div>
+            </td>
+          {% endfor %}
+        </tr>{% else %}<tr><td colspan="{{ days|length + 1 }}" class="empty-state"><i class="bi bi-people"></i><p>В группе пока нет студентов</p>{% if current_user.is_admin %}<a href="{{ url_for('admin.students') }}" class="btn btn-primary btn-sm">Добавить студентов</a>{% endif %}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <footer class="calendar-legend"><span><i class="legend-dot personal"></i>Метка</span><span><i class="legend-dot event"></i>Событие</span><span><i class="legend-schedule"></i>Есть занятия</span><span class="ms-auto d-none d-md-inline"><i class="bi bi-mouse"></i> Листайте календарь горизонтально — даты загружены непрерывно</span></footer>
+  </section>
+</main>
+
+<div class="offcanvas offcanvas-end cell-panel" tabindex="-1" id="cellOffcanvas" aria-labelledby="cellTitle">
+  <div class="offcanvas-header"><div><p class="eyebrow mb-1" data-panel-date>Дата</p><h2 class="h4 mb-0" id="cellTitle" data-panel-title>Детали</h2></div><button class="btn-close" data-bs-dismiss="offcanvas"></button></div>
+  <div class="offcanvas-body" data-panel-body><div class="panel-skeleton"><span></span><span></span><span></span></div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.CALENDAR_DATA={start:"{{ days[0].isoformat() }}",days:{{ days|length }},currentUserId:{{ current_user.id }},isAdmin:{{ current_user.is_admin|tojson }},groupName:{{ current_user.group_name|tojson }},initialScale:{{ view|tojson }},focusDate:{{ focus.isoformat()|tojson }}};</script><script src="{{ url_for('static', filename='js/calendar.js') }}"></script>{% endblock %}

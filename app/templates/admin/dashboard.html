@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Админ-панель — Student Dashboard{% endblock %}
+{% block content %}<main class="content-wrap admin-wrap"><div class="page-heading"><a href="{{ url_for('main.dashboard') }}" class="back-link"><i class="bi bi-arrow-left"></i> Календарь</a><h1>Админ-панель</h1><p>Управление пространством вашей учебной группы.</p></div>{% include 'admin/_nav.html' %}
+<div class="stats-grid">
+  <article class="stat-card"><span class="stat-icon blue"><i class="bi bi-people"></i></span><span><small>Студенты</small><strong>{{ stats.students }}</strong></span></article>
+  <article class="stat-card"><span class="stat-icon violet"><i class="bi bi-calendar-event"></i></span><span><small>События</small><strong>{{ stats.events }}</strong></span></article>
+  <article class="stat-card"><span class="stat-icon orange"><i class="bi bi-mortarboard"></i></span><span><small>Предстоящие экзамены</small><strong>{{ stats.exams }}</strong></span></article>
+  <article class="stat-card"><span class="stat-icon green"><i class="bi bi-bell"></i></span><span><small>Непрочитанные</small><strong>{{ stats.unread }}</strong></span></article>
+</div>
+<section class="surface-card"><div class="section-title"><div><h2>Ближайшие события</h2><p>Следующие важные даты</p></div><a class="btn btn-soft btn-sm" href="{{ url_for('admin.events') }}">Все события</a></div>
+{% for item in upcoming %}<div class="upcoming-row"><span class="event-date"><strong>{{ item.date.day }}</strong>{{ item.date.strftime('%m') }}</span><span class="event-color" style="background:{{ item.color }}"></span><span><strong>{{ item.title }}</strong><small>{{ item.type }}{% if item.start_time %} · {{ item.start_time.strftime('%H:%M') }}{% endif %}</small></span><span class="ms-auto text-secondary">{{ item.group_name or 'Все группы' }}</span></div>{% else %}<div class="empty-state py-5"><i class="bi bi-calendar2-check"></i><p>Ближайших событий нет</p></div>{% endfor %}</section>
+</main>{% endblock %}

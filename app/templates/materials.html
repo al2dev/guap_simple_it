@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Материалы — Student Dashboard{% endblock %}
+{% block content %}
+<main class="content-wrap materials-wrap">
+  <div class="page-heading materials-heading">
+    <div><a href="{{ url_for('main.dashboard') }}" class="back-link"><i class="bi bi-arrow-left"></i> Календарь</a><h1>Материалы</h1><p>Конспекты, презентации, полезные ссылки и обсуждения группы.</p></div>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#subjectModal"><i class="bi bi-plus-lg me-1"></i>Добавить предмет</button>
+  </div>
+
+  <div class="materials-layout">
+    <aside class="subject-sidebar surface-card">
+      <p class="eyebrow mb-2">Предметы</p>
+      <nav class="subject-list">
+        {% for subject in subjects %}<a class="{{ 'active' if selected and subject.id == selected.id }}" href="{{ url_for('main.materials', subject=subject.id) }}"><span class="subject-icon">{{ subject.name[:1]|upper }}</span><span><strong>{{ subject.name }}</strong><small>{{ subject.materials|length }} материалов</small></span><i class="bi bi-chevron-right"></i></a>{% else %}<p class="subject-empty">Создайте первый предмет, чтобы собирать материалы.</p>{% endfor %}
+      </nav>
+    </aside>
+
+    <section class="materials-main">
+      {% if selected %}
+      <div class="surface-card subject-hero">
+        <span class="subject-hero-icon">{{ selected.name[:1]|upper }}</span>
+        <div><p class="eyebrow mb-1">{{ current_user.group_name }}</p><h2>{{ selected.name }}</h2><p>{{ selected.description or 'Материалы и обсуждения по предмету.' }}</p></div>
+        <div class="ms-auto d-flex gap-2">
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#materialModal"><i class="bi bi-cloud-arrow-up me-1"></i>Добавить материал</button>
+          {% if current_user.is_admin %}<form method="post" action="{{ url_for('main.delete_subject', subject_id=selected.id) }}" onsubmit="return confirm('Удалить предмет вместе со всеми материалами?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-soft text-danger" title="Удалить предмет"><i class="bi bi-trash"></i></button></form>{% endif %}
+        </div>
+      </div>
+
+      <div class="material-feed">
+        {% for item in selected.materials %}
+        <article class="surface-card material-card" id="material-{{ item.id }}">
+          <div class="material-card-head">
+            <span class="material-type-icon"><i class="bi {{ 'bi-file-earmark-text' if item.stored_filename else 'bi-link-45deg' }}"></i></span>
+            <div><h3>{{ item.title }}</h3><p>Добавил {{ item.created_by.full_name if item.created_by else 'удалённый пользователь' }} · {{ item.created_at.strftime('%d.%m.%Y') }}</p></div>
+            {% if current_user.is_admin or item.created_by_id == current_user.id %}<form class="ms-auto" method="post" action="{{ url_for('main.delete_material', item_id=item.id) }}" onsubmit="return confirm('Удалить материал и комментарии?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-soft text-danger"><i class="bi bi-trash"></i></button></form>{% endif %}
+          </div>
+          {% if item.description %}<div class="material-description">{{ item.description }}</div>{% endif %}
+          <div class="material-actions">
+            {% if item.stored_filename %}<a class="material-resource" href="{{ url_for('main.material_file', filename=item.stored_filename) }}"><i class="bi bi-download"></i><span><strong>{{ item.original_filename }}</strong><small>{{ (item.file_size / 1024)|round(1) }} КБ</small></span></a>{% endif %}
+            {% if item.link_url %}<a class="material-resource" href="{{ item.link_url }}" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i><span><strong>Открыть ссылку</strong><small>{{ item.link_url|truncate(48) }}</small></span></a>{% endif %}
+          </div>
+          <div class="material-comments">
+            <button class="comments-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#comments-{{ item.id }}"><i class="bi bi-chat-left-text"></i>{{ item.comments|length }} {{ 'комментарий' if item.comments|length == 1 else 'комментариев' }}<i class="bi bi-chevron-down ms-auto"></i></button>
+            <div class="collapse {{ 'show' if request.args.get('material', type=int) == item.id }}" id="comments-{{ item.id }}">
+              <div class="material-comment-list">
+                {% for comment in item.comments %}<div class="material-comment"><span class="comment-avatar">{{ comment.author.initials }}</span><div><strong>{{ comment.author.full_name }}</strong><small>{{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</small><p>{{ comment.text }}</p></div>{% if current_user.is_admin or comment.author_id == current_user.id %}<form class="ms-auto" method="post" action="{{ url_for('main.delete_material_comment', comment_id=comment.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="comment-delete"><i class="bi bi-x-lg"></i></button></form>{% endif %}</div>{% else %}<div class="panel-empty">Обсуждение пока пусто</div>{% endfor %}
+              </div>
+              <form class="material-comment-form" method="post" action="{{ url_for('main.add_material_comment', item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input class="form-control" name="text" maxlength="2000" required placeholder="Написать комментарий…"><button class="btn btn-primary"><i class="bi bi-send"></i></button></form>
+            </div>
+          </div>
+        </article>
+        {% else %}<div class="surface-card empty-state material-empty"><i class="bi bi-folder2-open"></i><h3>Материалов пока нет</h3><p>Добавьте файл, полезную ссылку или описание.</p><button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#materialModal">Добавить первый материал</button></div>{% endfor %}
+      </div>
+      {% else %}
+      <div class="surface-card empty-state material-empty"><i class="bi bi-journals"></i><h2>Начните с предмета</h2><p>Создайте предмет и соберите в нём файлы, ссылки и обсуждения.</p><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#subjectModal">Добавить предмет</button></div>
+      {% endif %}
+    </section>
+  </div>
+</main>
+
+<div class="modal fade" id="subjectModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" action="{{ url_for('main.add_subject') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-header"><div><p class="eyebrow mb-1">Новый раздел</p><h2 class="modal-title h5">Добавить предмет</h2></div><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label">Название</label><input class="form-control" name="name" maxlength="160" required placeholder="Например, Математика"></div><div><label class="form-label">Описание</label><textarea class="form-control" name="description" rows="3" placeholder="Кратко о предмете"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Отмена</button><button class="btn btn-primary">Создать</button></div></form></div></div></div>
+
+{% if selected %}<div class="modal fade" id="materialModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form method="post" enctype="multipart/form-data" action="{{ url_for('main.add_material', subject_id=selected.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="modal-header"><div><p class="eyebrow mb-1">{{ selected.name }}</p><h2 class="modal-title h5">Новый материал</h2></div><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label">Название</label><input class="form-control" name="title" maxlength="180" required placeholder="Лекция 1 или полезная статья"></div><div class="mb-3"><label class="form-label">Описание</label><textarea class="form-control" name="description" rows="4" placeholder="О чём этот материал"></textarea></div><div class="mb-3"><label class="form-label">Ссылка</label><input class="form-control" type="url" name="link_url" maxlength="1000" placeholder="https://..."></div><div><label class="form-label">Файл</label><input class="form-control" type="file" name="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.png,.jpg,.jpeg,.webp"><div class="form-text">Документы, архивы и изображения до 20 МБ.</div></div></div><div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Отмена</button><button class="btn btn-primary">Опубликовать</button></div></form></div></div></div>{% endif %}
+{% endblock %}

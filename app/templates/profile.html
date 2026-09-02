@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Профиль — Student Dashboard{% endblock %}
+{% block content %}
+<main class="content-wrap narrow-wrap">
+  <div class="page-heading"><a href="{{ url_for('main.dashboard') }}" class="back-link"><i class="bi bi-arrow-left"></i> Календарь</a><h1>Профиль</h1><p>Личные данные и безопасность аккаунта.</p></div>
+  <section class="surface-card profile-hero">
+    {% if current_user.avatar %}<img class="profile-avatar" src="{{ url_for('main.avatar', filename=current_user.avatar) }}" alt="">{% else %}<span class="profile-avatar avatar-initials">{{ current_user.initials }}</span>{% endif %}
+    <div><h2>{{ current_user.full_name }}</h2><p>{{ current_user.group_name }} · {{ 'Администратор' if current_user.is_admin else 'Студент' }}</p></div>
+  </section>
+  <div class="profile-grid">
+    <section class="surface-card"><div class="card-heading"><i class="bi bi-person"></i><div><h2>Основная информация</h2><p>Логин останется прежним при смене фамилии.</p></div></div>
+      <form method="post" enctype="multipart/form-data" novalidate>{{ profile_form.hidden_tag() }}
+        <div class="mb-3"><label class="form-label">Логин</label><input class="form-control" value="{{ current_user.login }}" readonly></div>
+        <div class="row g-3"><div class="col-md-6">{{ profile_form.first_name.label(class="form-label") }}{{ profile_form.first_name(class="form-control") }}</div><div class="col-md-6">{{ profile_form.last_name.label(class="form-label") }}{{ profile_form.last_name(class="form-control") }}</div></div>
+        <div class="mt-3">{{ profile_form.avatar.label(class="form-label") }}{{ profile_form.avatar(class="form-control", accept="image/jpeg,image/png,image/webp") }}<div class="form-text">JPG, PNG или WebP, не более 3 МБ.</div>{% for e in profile_form.avatar.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        {{ profile_form.submit(class="btn btn-primary mt-4") }}
+      </form>
+    </section>
+    <section class="surface-card"><div class="card-heading"><i class="bi bi-shield-lock"></i><div><h2>Безопасность</h2><p>Используйте не менее 6 символов.</p></div></div>
+      <form method="post" novalidate>{{ password_form.hidden_tag() }}
+        <div class="mb-3">{{ password_form.current_password.label(class="form-label") }}{{ password_form.current_password(class="form-control") }}</div>
+        <div class="mb-3">{{ password_form.new_password.label(class="form-label") }}{{ password_form.new_password(class="form-control") }}</div>
+        <div class="mb-3">{{ password_form.confirm_password.label(class="form-label") }}{{ password_form.confirm_password(class="form-control") }}{% for e in password_form.confirm_password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+        {{ password_form.submit_password(class="btn btn-outline-primary") }}
+      </form>
+    </section>
+  </div>
+</main>
+{% endblock %}

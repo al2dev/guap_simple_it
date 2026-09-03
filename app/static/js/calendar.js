@@ -42,7 +42,7 @@
 
   function scheduleCards(items) {
     if (!items.length) return empty('В расписании нет занятий');
-    return items.map(item => `<article class="schedule-panel-row"><time>${item.start_time}</time><span><strong>${esc(item.subject)}</strong><small>${esc(item.type)}${item.room ? ` · ауд. ${esc(item.room)}` : ''}${item.teacher ? ` · ${esc(item.teacher)}` : ''}</small>${item.description ? `<small>${esc(item.description)}</small>` : ''}</span></article>`).join('');
+    return items.map(item => `<article class="schedule-panel-row"><time>${item.start_time}</time><span class="flex-grow-1"><strong>${esc(item.subject)}</strong><small>${esc(item.type)}${item.room ? ` · ауд. ${esc(item.room)}` : ''}${item.teacher ? ` · ${esc(item.teacher)}` : ''}</small>${item.description ? `<small>${esc(item.description)}</small>` : ''}</span>${window.CALENDAR_DATA.isAdmin ? `<button class="comment-delete" data-delete-schedule="${item.id}" title="Удалить занятие"><i class="bi bi-trash"></i></button>` : ''}</article>`).join('');
   }
 
   async function refreshDecorations() {
@@ -92,6 +92,11 @@
     return `<section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-plus-lg"></i>Общее событие</h3><form class="add-tag-box" data-day-event-form><div class="mb-2"><label class="form-label">Название</label><input class="form-control" name="title" maxlength="160" required placeholder="Экзамен по математике"></div><div class="row g-2 mb-2"><div class="col-7"><label class="form-label">Тип</label><select class="form-select" name="type"><option>Экзамен</option><option>Зачёт</option><option>Контрольная</option><option>Лабораторная</option><option>Встреча</option><option>Другое</option></select></div><div class="col-5"><label class="form-label">Время</label><input class="form-control" type="time" name="start_time"></div></div><div class="row g-2 mb-2"><div class="col-8"><label class="form-label">Место</label><input class="form-control" name="location" maxlength="120" placeholder="Аудитория 302"></div><div class="col-4"><label class="form-label">Цвет</label><input class="form-control form-control-color w-100" type="color" name="color" value="#ef4444"></div></div><div class="mb-2"><label class="form-label">Описание</label><textarea class="form-control" name="description" rows="2"></textarea></div><input type="hidden" name="date" value="${day}"><button class="btn btn-primary w-100"><i class="bi bi-calendar-plus me-1"></i>Добавить всей группе</button></form></section>`;
   }
 
+  function adminScheduleForm(day) {
+    if (!window.CALENDAR_DATA.isAdmin) return '';
+    return `<section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-journal-plus"></i>Дополнительное занятие</h3><form class="add-tag-box" data-day-schedule-form><div class="mb-2"><label class="form-label">Предмет</label><input class="form-control" name="subject" maxlength="160" required placeholder="Название предмета"></div><div class="row g-2 mb-2"><div class="col-6"><label class="form-label">Начало</label><input class="form-control" type="time" name="start_time" required></div><div class="col-6"><label class="form-label">Окончание</label><input class="form-control" type="time" name="end_time"></div></div><div class="row g-2 mb-2"><div class="col-6"><label class="form-label">Тип</label><select class="form-select" name="type"><option>Лекция</option><option>Практическое занятие</option><option>Лабораторное занятие</option><option>Занятие</option></select></div><div class="col-6"><label class="form-label">Аудитория</label><input class="form-control" name="room" maxlength="80"></div></div><div class="mb-2"><label class="form-label">Преподаватель</label><input class="form-control" name="teacher" maxlength="160"></div><div class="mb-2"><label class="form-label">Описание</label><textarea class="form-control" name="description" rows="2"></textarea></div><input type="hidden" name="date" value="${day}"><button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Добавить занятие</button></form></section>`;
+  }
+
   async function openDay(day) {
     activeCell = null;
     activeDay = day;
@@ -101,7 +106,7 @@
     panel.show();
     try {
       const data = await request(`/api/day/${day}`);
-      body.innerHTML = `${adminEventForm(day)}<section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-calendar-event"></i>События дня</h3>${eventCards(data.events)}</section><section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-journal-text"></i>Расписание</h3>${scheduleCards(data.schedule)}</section>`;
+      body.innerHTML = `<section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-journal-text"></i>Расписание</h3>${scheduleCards(data.schedule)}</section><section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-calendar-event"></i>События дня</h3>${eventCards(data.events)}</section>${adminEventForm(day)}${adminScheduleForm(day)}`;
     } catch (error) { body.innerHTML = empty(error.message); }
   }
 
@@ -173,6 +178,13 @@
         await refreshDecorations();
         await openDay(activeDay);
         toast('Событие добавлено всей группе');
+      } else if (form.matches('[data-day-schedule-form]')) {
+        const payload = Object.fromEntries(values.entries());
+        payload.group_name = window.CALENDAR_DATA.groupName;
+        await request('/api/admin/schedule', {method:'POST', body:payload});
+        await refreshDecorations();
+        await openDay(activeDay);
+        toast('Занятие добавлено в расписание');
       }
     } catch (error) { toast(error.message, true); }
   });
@@ -180,6 +192,7 @@
     const tag = event.target.closest('[data-delete-tag]');
     const comment = event.target.closest('[data-delete-comment]');
     const dayEvent = event.target.closest('[data-delete-event]');
+    const scheduleItem = event.target.closest('[data-delete-schedule]');
     try {
       if (tag) {
         await request(`/api/cell/${activeCell.studentId}/${activeCell.date}/tag/${tag.dataset.deleteTag}`, {method:'DELETE'});
@@ -193,6 +206,12 @@
         if (activeDay) await openDay(activeDay);
         else if (activeCell) await reloadCell();
         toast('Событие удалено');
+      } else if (scheduleItem && confirm('Удалить занятие из расписания на этот день?')) {
+        await request(`/api/admin/schedule/${scheduleItem.dataset.deleteSchedule}`, {method:'DELETE'});
+        await refreshDecorations();
+        if (activeDay) await openDay(activeDay);
+        else if (activeCell) await reloadCell();
+        toast('Занятие удалено');
       }
     } catch (error) { toast(error.message, true); }
   });

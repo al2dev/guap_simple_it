@@ -128,6 +128,20 @@ class ScheduleItem(TimestampMixin, db.Model):
     group_name = db.Column(db.String(80), index=True)
 
 
+class ScheduleImport(TimestampMixin, db.Model):
+    """Links an imported occurrence to its row and remembers admin cancellations."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    source_url = db.Column(db.String(1000), nullable=False)
+    source_key = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    group_name = db.Column(db.String(80), nullable=False, index=True)
+    period_start = db.Column(db.Date, nullable=False, index=True)
+    period_end = db.Column(db.Date, nullable=False)
+    schedule_item_id = db.Column(db.Integer, db.ForeignKey("schedule_item.id", ondelete="SET NULL"), unique=True)
+    is_cancelled = db.Column(db.Boolean, nullable=False, default=False)
+    schedule_item = db.relationship("ScheduleItem")
+
+
 class Subject(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(160), nullable=False)

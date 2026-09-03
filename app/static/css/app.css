@@ -135,7 +135,7 @@ a { color: inherit; }
 .event-panel-card { border-left: 3px solid var(--event-color); }
 .event-panel-card strong, .schedule-panel-row strong { display: block; font-size: 12px; }
 .event-panel-card small, .schedule-panel-row small { color: var(--app-muted); display: block; margin-top: 4px; font-size: 10px; }
-.schedule-panel-row { display: grid; grid-template-columns: 48px 1fr; gap: 12px; }
+.schedule-panel-row { display: grid; grid-template-columns: 48px 1fr auto; gap: 12px; }
 .schedule-panel-row time { font-weight: 800; color: var(--app-primary); font-size: 11px; }
 .comment { display: grid; grid-template-columns: 29px 1fr auto; gap: 9px; margin-bottom: 14px; }
 .comment-avatar { width: 29px; height: 29px; border-radius: 50%; background: var(--app-primary-soft); color: var(--app-primary); display: grid; place-items: center; font-size: 9px; font-weight: 800; }

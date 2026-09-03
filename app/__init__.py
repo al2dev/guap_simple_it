@@ -63,6 +63,11 @@ def create_app(config_object=Config):
             from .services import ensure_initial_data
             ensure_initial_data()
 
+    if app.config.get("URL_GROUP_SCHEDULE"):
+        with app.app_context():
+            from .schedule_import import import_configured_schedule
+            import_configured_schedule(app)
+
     @app.cli.command("init-data")
     def init_data_command():
         """Create the configured admin and optional demo records."""

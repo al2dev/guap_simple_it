@@ -27,6 +27,8 @@ class Config:
     ADMIN_FIRST_NAME = os.getenv("ADMIN_FIRST_NAME", "Администратор")
     ADMIN_LAST_NAME = os.getenv("ADMIN_LAST_NAME", "Системы")
     DEFAULT_GROUP = os.getenv("DEFAULT_GROUP", "ИВ-23")
+    URL_GROUP_SCHEDULE = os.getenv("URL_GROUP_SCHEDULE", "").strip()
+    SCHEDULE_FETCH_TIMEOUT = float(os.getenv("SCHEDULE_FETCH_TIMEOUT", "10"))
     SEED_DEMO = os.getenv("SEED_DEMO", "false").lower() in {"1", "true", "yes"}
     AUTO_CREATE_DB = os.getenv("AUTO_CREATE_DB", "true").lower() in {"1", "true", "yes"}
     SESSION_COOKIE_HTTPONLY = True
@@ -43,3 +45,5 @@ class TestConfig(Config):
     ADMIN_PASSWORD = "change-me"
     ADMIN_FIRST_NAME = "Test"
     ADMIN_LAST_NAME = "Admin"
+    DEFAULT_GROUP = "ИВ-23"
+    URL_GROUP_SCHEDULE = ""

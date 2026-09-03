@@ -8,6 +8,7 @@ from .extensions import db
 from .forms import EventForm, ScheduleForm, StudentForm, TagForm
 from .models import Event, Notification, ScheduleItem, Tag, User
 from .services import unique_login, valid_color
+from .schedule_import import cancel_or_delete_schedule
 
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -187,7 +188,7 @@ def edit_schedule(item_id):
 @login_required
 @admin_required
 def delete_schedule(item_id):
-    db.session.delete(db.get_or_404(ScheduleItem, item_id))
+    cancel_or_delete_schedule(db.get_or_404(ScheduleItem, item_id))
     db.session.commit()
     flash("Занятие удалено", "success")
     return redirect(url_for("admin.schedule"))

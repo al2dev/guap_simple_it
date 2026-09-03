@@ -9,6 +9,7 @@ from .decorators import admin_required
 from .extensions import db
 from .models import CellTag, Comment, Event, Notification, ScheduleItem, Tag, User, iso_date, iso_time
 from .services import parse_date, parse_time, valid_color
+from .schedule_import import cancel_or_delete_schedule
 
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -244,6 +245,23 @@ def _admin_event_from_payload(event, data):
     event.description = str(data.get("description", ""))
 
 
+def _admin_schedule_from_payload(item, data):
+    subject = str(data.get("subject", "")).strip()
+    if not subject or len(subject) > 160:
+        raise ValueError("Укажите название предмета")
+    item.date = parse_date(str(data.get("date", "")))
+    item.start_time = parse_time(data.get("start_time"))
+    if not item.start_time:
+        raise ValueError("Укажите время начала")
+    item.end_time = parse_time(data.get("end_time"))
+    item.subject = subject
+    item.teacher = str(data.get("teacher", "")).strip()[:160]
+    item.room = str(data.get("room", "")).strip()[:80]
+    item.type = str(data.get("type", "Занятие")).strip()[:40] or "Занятие"
+    item.group_name = str(data.get("group_name", "")).strip()[:80] or None
+    item.description = str(data.get("description", "")).strip()
+
+
 @bp.post("/admin/events")
 @login_required
 @admin_required
@@ -282,5 +300,31 @@ def api_delete_event(event_id):
     if not event:
         return json_error("Событие не найдено", 404)
     db.session.delete(event)
+    db.session.commit()
+    return "", 204
+
+
+@bp.post("/admin/schedule")
+@login_required
+@admin_required
+def api_create_schedule():
+    item = ScheduleItem()
+    try:
+        _admin_schedule_from_payload(item, request.get_json(silent=True) or {})
+    except (ValueError, TypeError) as error:
+        return json_error(str(error) or "Некорректные данные занятия")
+    db.session.add(item)
+    db.session.commit()
+    return jsonify(serialize_schedule(item)), 201
+
+
+@bp.delete("/admin/schedule/<int:item_id>")
+@login_required
+@admin_required
+def api_delete_schedule(item_id):
+    item = db.session.get(ScheduleItem, item_id)
+    if not item:
+        return json_error("Занятие не найдено", 404)
+    cancel_or_delete_schedule(item)
     db.session.commit()
     return "", 204

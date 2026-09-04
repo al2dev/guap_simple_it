@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, request, url_for
+from flask import Flask, flash, jsonify, redirect, request, url_for
 from flask_login import current_user
 
 from config import Config
@@ -56,6 +56,14 @@ def create_app(config_object=Config):
         if request.path.startswith("/api/"):
             return jsonify(error="Не найдено"), 404
         return "Страница не найдена", 404
+
+    @app.errorhandler(413)
+    def request_too_large(_error):
+        limit_mb = app.config["MAX_MATERIAL_SIZE"] // (1024 * 1024)
+        if request.path.startswith("/api/"):
+            return jsonify(error=f"Файл превышает допустимый размер {limit_mb} МБ"), 413
+        flash(f"Файл превышает допустимый размер {limit_mb} МБ", "danger")
+        return redirect(url_for("main.materials")), 303
 
     if app.config["AUTO_CREATE_DB"]:
         with app.app_context():

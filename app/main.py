@@ -93,6 +93,12 @@ def avatar(filename):
 ALLOWED_MATERIAL_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "zip", "png", "jpg", "jpeg", "webp"}
 
 
+def _uploaded_filename(filename):
+    """Return a display-safe basename without dropping Unicode characters."""
+    basename = (filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()
+    return "".join(char for char in basename if ord(char) >= 32)[:255]
+
+
 def _subject_for_group(subject_id):
     subject = db.session.get(Subject, subject_id)
     return subject if subject and subject.group_name == current_user.group_name else None
@@ -151,8 +157,8 @@ def add_material(subject_id):
         return redirect(url_for("main.materials", subject=subject.id))
     item = Material(subject_id=subject.id, title=title, description=request.form.get("description", "").strip(), link_url=link_url[:1000], created_by_id=current_user.id)
     if uploaded and uploaded.filename:
-        safe_name = secure_filename(uploaded.filename)
-        extension = safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
+        original_name = _uploaded_filename(uploaded.filename)
+        extension = original_name.rsplit(".", 1)[-1].strip().lower() if "." in original_name else ""
         uploaded.stream.seek(0, 2)
         size = uploaded.stream.tell()
         uploaded.stream.seek(0)
@@ -160,11 +166,12 @@ def add_material(subject_id):
             flash("Недопустимый тип файла", "danger")
             return redirect(url_for("main.materials", subject=subject.id))
         if size > current_app.config["MAX_MATERIAL_SIZE"]:
-            flash("Файл должен быть не больше 20 МБ", "danger")
+            limit_mb = current_app.config["MAX_MATERIAL_SIZE"] // (1024 * 1024)
+            flash(f"Файл должен быть не больше {limit_mb} МБ", "danger")
             return redirect(url_for("main.materials", subject=subject.id))
         stored = f"{current_user.id}-{secrets.token_hex(12)}.{extension}"
         uploaded.save(Path(current_app.config["MATERIAL_UPLOAD_FOLDER"]) / stored)
-        item.stored_filename, item.original_filename, item.file_size = stored, safe_name[:255], size
+        item.stored_filename, item.original_filename, item.file_size = stored, original_name, size
     if not item.link_url and not item.stored_filename and not item.description:
         flash("Добавьте файл, ссылку или описание", "danger")
         return redirect(url_for("main.materials", subject=subject.id))

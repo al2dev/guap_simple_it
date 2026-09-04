@@ -211,3 +211,36 @@ def test_materials_subject_file_link_and_comments(client, app):
     with app.app_context():
         assert db.session.scalar(db.select(db.func.count(MaterialComment.id))) == 1
     assert client.post(f"/materials/items/{material_id}/delete").status_code == 302
+
+
+def test_material_upload_accepts_cyrillic_pdf_filename(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    client.post("/materials/subjects", data={"name":"Документы"})
+    with app.app_context():
+        subject_id = db.session.scalar(db.select(Subject.id).where(Subject.name == "Документы"))
+    response = client.post(
+        f"/materials/subjects/{subject_id}/items",
+        data={"title":"Методичка", "file":(BytesIO(b"%PDF-1.4\n%%EOF"), "Лекция №1.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        material = db.session.scalar(db.select(Material).where(Material.subject_id == subject_id))
+        assert material.original_filename == "Лекция №1.pdf"
+        assert material.stored_filename.endswith(".pdf")
+
+
+def test_material_upload_rejects_file_over_configured_limit(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    client.post("/materials/subjects", data={"name":"Лимиты"})
+    with app.app_context():
+        subject_id = db.session.scalar(db.select(Subject.id).where(Subject.name == "Лимиты"))
+        app.config["MAX_MATERIAL_SIZE"] = 10
+    response = client.post(
+        f"/materials/subjects/{subject_id}/items",
+        data={"title":"Большой файл", "file":(BytesIO(b"%PDF-" + b"x" * 20), "Большой.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.scalar(db.select(db.func.count(Material.id)).where(Material.subject_id == subject_id)) == 0

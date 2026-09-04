@@ -100,6 +100,11 @@ a { color: inherit; }
 .student-card > span:last-child { min-width: 0; }
 .student-card strong { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .student-card small { display: block; color: var(--app-muted); font-size: 9px; margin-top: 3px; }
+.calendar-scroll.names-hidden { --student-width: 58px; }
+.calendar-scroll.names-hidden .student-card { justify-content: center; }
+.calendar-scroll.names-hidden .student-card > span:last-child,
+.calendar-scroll.names-hidden .student-column-title { display: none; }
+.calendar-scroll.names-hidden .student-count { margin: 0 auto; }
 .calendar-cell { width: var(--day-width); min-width: var(--day-width); height: 67px; padding: 0; cursor: pointer; background: var(--app-surface); transition: background .12s, width .2s, min-width .2s; }
 .calendar-cell:hover, .calendar-cell:focus { outline: 0; background: var(--app-surface-2); }
 .calendar-cell.own-cell { background: color-mix(in srgb, var(--app-primary) 2.5%, var(--app-surface)); }
@@ -172,4 +177,11 @@ a { color: inherit; }
 }
 @media (max-width: 460px) {
   .view-switch .btn{font-size:10px;padding:.4rem .55rem}.calendar-toolbar>div:first-child{width:calc(100% - 160px)}.date-navigation .month-title{font-size:10px}.stats-grid{grid-template-columns:1fr}.profile-hero{align-items:flex-start}.content-wrap{width:calc(100% - 24px)}
+}
+
+/* Long admin forms must scroll with the page so their submit button stays reachable. */
+.admin-wrap .admin-form-card { position: static; }
+@media (max-width: 720px) {
+  [data-toggle-student-names] span { display: none; }
+  [data-toggle-student-names] i { margin-right: 0!important; }
 }

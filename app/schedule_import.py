@@ -29,16 +29,14 @@ class _Node:
         self.attrs = dict(attrs or [])
         self.parent = parent
         self.children = []
-        self.parts = []
+        self.content = []
 
     @property
     def classes(self):
         return set(self.attrs.get("class", "").split())
 
     def text(self):
-        values = list(self.parts)
-        for child in self.children:
-            values.append(child.text())
+        values = [item.text() if isinstance(item, _Node) else item for item in self.content]
         return " ".join(" ".join(values).split())
 
     def descendants(self, tag=None):
@@ -59,11 +57,14 @@ class _ScheduleHTMLParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         node = _Node(tag, attrs, self.current)
         self.current.children.append(node)
+        self.current.content.append(node)
         if tag not in self.VOID_TAGS:
             self.current = node
 
     def handle_startendtag(self, tag, attrs):
-        self.current.children.append(_Node(tag, attrs, self.current))
+        node = _Node(tag, attrs, self.current)
+        self.current.children.append(node)
+        self.current.content.append(node)
 
     def handle_endtag(self, tag):
         node = self.current
@@ -75,7 +76,7 @@ class _ScheduleHTMLParser(HTMLParser):
 
     def handle_data(self, data):
         if data.strip():
-            self.current.parts.append(data)
+            self.current.content.append(data)
 
 
 @dataclass(frozen=True)
@@ -87,7 +88,10 @@ class LessonTemplate:
     subject: str
     teacher: str
     room: str
+    address: str
     lesson_type: str
+    source_teacher: str
+    source_room: str
 
 
 def _first_descendant(node, predicate):
@@ -124,8 +128,17 @@ def parse_schedule_page(html: str) -> list[LessonTemplate]:
             details_node = _first_descendant(content, lambda child: child.tag == "div" and "opacity-75" in child.classes)
             if not type_node or not subject_node:
                 continue
-            room_node = _first_descendant(details_node or content, lambda child: child.tag == "a" and "rasp?ad=" in child.attrs.get("href", ""))
-            teacher_node = _first_descendant(details_node or content, lambda child: child.tag == "a" and "rasp?pr=" in child.attrs.get("href", ""))
+            room_node = _first_descendant(details_node or content, lambda child: child.tag == "a" and re.search(r"[?&]ad=", child.attrs.get("href", "")))
+            teacher_node = _first_descendant(details_node or content, lambda child: child.tag == "a" and re.search(r"[?&]pr=", child.attrs.get("href", "")))
+            details_text = (details_node or content).text()
+            room_fallback = re.search(r"ауд\.\s*(.*?)\s+[—–-]\s+", details_text, re.IGNORECASE)
+            teacher_fallback = re.search(r"преп:\s*(.*?)(?:\s+гр:|$)", details_text, re.IGNORECASE)
+            source_room = room_node.text() if room_node else (room_fallback.group(1).strip() if room_fallback else "")
+            room_match = re.match(r"^(.*?)\s*\(([^()]*)\)\s*$", source_room)
+            room = room_match.group(1).strip() if room_match else source_room
+            address = room_match.group(2).strip() if room_match else ""
+            source_teacher = teacher_node.text() if teacher_node else (teacher_fallback.group(1).strip(" .") if teacher_fallback else "")
+            teacher = source_teacher.split(",", 1)[0].strip()
             parity = 1 if "week1" in marker.classes else 2 if "week2" in marker.classes else None
             lessons.append(LessonTemplate(
                 weekday=WEEKDAYS[heading_text],
@@ -133,9 +146,12 @@ def parse_schedule_page(html: str) -> list[LessonTemplate]:
                 start_time=datetime.strptime(time_range[0], "%H:%M").time(),
                 end_time=datetime.strptime(time_range[1], "%H:%M").time(),
                 subject=subject_node.text(),
-                teacher=teacher_node.text() if teacher_node else "",
-                room=room_node.text() if room_node else "",
+                teacher=teacher,
+                room=room,
+                address=address,
                 lesson_type=type_node.text().strip(),
+                source_teacher=source_teacher,
+                source_room=source_room,
             ))
     if not lessons:
         raise ValueError("На странице не найдено расписание по дням недели")
@@ -160,7 +176,8 @@ def expand_schedule(templates: list[LessonTemplate], start: date, end: date):
 
 
 def _source_key(group_name: str, occurrence_date: date, lesson: LessonTemplate) -> str:
-    value = "|".join((group_name, occurrence_date.isoformat(), lesson.start_time.isoformat(), lesson.end_time.isoformat(), lesson.subject, lesson.teacher, lesson.room, lesson.lesson_type))
+    # Raw values keep keys compatible with imports made before room/address splitting.
+    value = "|".join((group_name, occurrence_date.isoformat(), lesson.start_time.isoformat(), lesson.end_time.isoformat(), lesson.subject, lesson.source_teacher, lesson.source_room, lesson.lesson_type))
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -203,6 +220,7 @@ def sync_schedule(html: str, source_url: str, group_name: str, today: date | Non
         item.subject = lesson.subject[:160]
         item.teacher = lesson.teacher[:160]
         item.room = lesson.room[:80]
+        item.address = lesson.address[:160]
         item.type = lesson.lesson_type[:40] or "Занятие"
         item.group_name = group_name
         imported.source_url = source_url

@@ -150,11 +150,14 @@ def schedule():
     if form.validate_on_submit():
         item = ScheduleItem()
         _fill_schedule(item, form)
+        item.group_name = current_user.group_name
         db.session.add(item)
         db.session.commit()
         flash("Занятие добавлено", "success")
         return redirect(url_for("admin.schedule"))
-    items = db.session.scalars(db.select(ScheduleItem).order_by(ScheduleItem.date.desc(), ScheduleItem.start_time)).all()
+    elif request.method == "GET":
+        form.group_name.data = current_user.group_name
+    items = db.session.scalars(db.select(ScheduleItem).where(db.or_(ScheduleItem.group_name == current_user.group_name, ScheduleItem.group_name.is_(None))).order_by(ScheduleItem.date.desc(), ScheduleItem.start_time)).all()
     return render_template("admin/schedule.html", items=items, form=form)
 
 
@@ -165,6 +168,7 @@ def _fill_schedule(item, form):
     item.subject = form.subject.data.strip()
     item.teacher = (form.teacher.data or "").strip()
     item.room = (form.room.data or "").strip()
+    item.address = (form.address.data or "").strip()
     item.type = form.type.data
     item.group_name = (form.group_name.data or "").strip() or None
     item.description = (form.description.data or "").strip()

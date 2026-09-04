@@ -8,7 +8,7 @@ from app.extensions import db
 from app.models import Event, Material, MaterialComment, Notification, ScheduleImport, ScheduleItem, Subject, Tag, User
 from app.schedule_import import parse_schedule_page, sync_schedule
 from tests.conftest import login
-from app.services import unique_login
+from app.services import ensure_initial_data, unique_login
 
 
 def test_login_logout_and_dashboard(client):
@@ -87,6 +87,7 @@ def test_admin_html_crud_for_all_sections(client, app):
     assert client.post("/admin/events", data=event_data).status_code == 302
     schedule_data={"date":date.today().isoformat(),"start_time":"09:00","subject":"Физика","type":"Лекция","submit":"Сохранить"}
     assert client.post("/admin/schedule", data=schedule_data).status_code == 302
+    assert client.get(f"/api/day/{date.today().isoformat()}").get_json()["schedule"][0]["subject"] == "Физика"
     assert client.post("/admin/tags", data={"name":"Готово","color":"#22c55e","description":"Сдано","submit":"Сохранить"}).status_code == 302
     for path in ["/admin/students","/admin/events","/admin/schedule","/admin/tags"]:
         assert client.get(path).status_code == 200
@@ -132,11 +133,19 @@ def test_admin_can_create_and_delete_group_event_from_day_api(client, app):
 
 
 def test_guap_saved_page_is_parsed_and_expanded_without_duplicates(app):
-    page = (Path(__file__).parents[1] / "page" / "Расписание занятий.html").read_text(encoding="utf-8")
+    page = (Path(__file__).parent / "fixtures" / "guap_schedule.html").read_text(encoding="utf-8")
     templates = parse_schedule_page(page)
     assert templates
     assert any(item.subject == "Информатика" and item.week_parity == 1 for item in templates)
     assert any(item.subject == "Информатика" and item.week_parity is None for item in templates)
+    informatics = next(item for item in templates if item.subject == "Информатика" and item.room == "22-09")
+    assert informatics.lesson_type == "Лекция"
+    assert informatics.address == "Ленсовета 14"
+    assert informatics.teacher == "Турнецкая Е.Л."
+    laboratory = next(item for item in templates if item.lesson_type == "Лабораторное занятие")
+    assert laboratory.room == "24-03"
+    assert laboratory.address == "Гастелло 15"
+    assert laboratory.teacher == "Турнецкая Е.Л."
     with app.app_context():
         first = sync_schedule(page, "https://guap.ru/rasp?gr=7923", "ИВ-23", date(2026, 9, 3))
         count = db.session.scalar(db.select(db.func.count(ScheduleItem.id)))
@@ -145,17 +154,31 @@ def test_guap_saved_page_is_parsed_and_expanded_without_duplicates(app):
         assert second["created"] == 0
         assert db.session.scalar(db.select(db.func.count(ScheduleItem.id))) == count
         assert db.session.scalar(db.select(db.func.count(ScheduleImport.id))) == count
+        assert all(item.date.weekday() in {0, 5} for item in db.session.scalars(db.select(ScheduleItem)).all())
+
+
+def test_real_schedule_configuration_removes_moving_demo_lessons(app):
+    with app.app_context():
+        app.config["URL_GROUP_SCHEDULE"] = "https://guap.ru/rasp?gr=7923"
+        db.session.add_all([
+            ScheduleItem(date=date.today(), start_time=time(9, 0), subject="Математика", teacher="А. В. Орлов", room="302", group_name="ИВ-23"),
+            ScheduleItem(date=date.today(), start_time=time(10, 40), subject="Программирование", teacher="М. И. Соколов", room="214", group_name="ИВ-23"),
+        ])
+        db.session.commit()
+        ensure_initial_data()
+        assert db.session.scalar(db.select(db.func.count(ScheduleItem.id))) == 0
 
 
 def test_admin_can_add_and_cancel_imported_schedule_from_day(client, app):
     login(client, "admin", "change-me")
     target = date(2026, 9, 5)
-    payload = {"subject":"Дополнительная практика","date":target.isoformat(),"start_time":"15:10","end_time":"16:40","type":"Практическое занятие","group_name":"ИВ-23"}
+    payload = {"subject":"Дополнительная практика","date":target.isoformat(),"start_time":"15:10","end_time":"16:40","type":"Практическое занятие","room":"14-15","address":"Ленсовета 14","teacher":"Иванов И.И.","group_name":"ИВ-23"}
     created = client.post("/api/admin/schedule", json=payload)
     assert created.status_code == 201
+    assert created.get_json()["address"] == "Ленсовета 14"
     assert client.delete(f"/api/admin/schedule/{created.get_json()['id']}").status_code == 204
 
-    page = (Path(__file__).parents[1] / "page" / "Расписание занятий.html").read_text(encoding="utf-8")
+    page = (Path(__file__).parent / "fixtures" / "guap_schedule.html").read_text(encoding="utf-8")
     with app.app_context():
         sync_schedule(page, "https://guap.ru/rasp?gr=7923", "ИВ-23", date(2026, 9, 3))
         imported = db.session.scalar(db.select(ScheduleImport).where(ScheduleImport.schedule_item_id.is_not(None)))

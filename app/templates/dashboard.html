@@ -6,6 +6,7 @@
     <div><p class="eyebrow mb-1">{{ current_user.group_name }}</p><h1 class="h3 mb-0">Календарь группы</h1></div>
     <div class="date-navigation">
       <button class="btn btn-soft" type="button" data-scroll-today><i class="bi bi-crosshair me-1"></i>Сегодня</button>
+      <button class="btn btn-soft" type="button" data-toggle-student-names aria-pressed="false" title="Скрыть фамилии студентов"><i class="bi bi-layout-sidebar-inset me-1"></i><span>Фамилии</span></button>
       <strong class="month-title" data-visible-month>Календарь</strong>
     </div>
     <div class="view-switch btn-group" role="group">
@@ -16,9 +17,9 @@
   </header>
 
   <section class="calendar-card">
-    <div class="calendar-scroll">
+    <div class="calendar-scroll" data-calendar-scroll>
       <table class="calendar-table">
-        <thead><tr><th class="student-column"><span class="text-secondary fw-medium">Студенты</span><span class="student-count">{{ students|length }}</span></th>
+        <thead><tr><th class="student-column"><span class="student-column-title text-secondary fw-medium">Студенты</span><span class="student-count">{{ students|length }}</span></th>
           {% for day in days %}
           {% set day_schedule = schedule_by_date.get(day, []) %}
           <th class="day-heading {{ 'today' if day == today }} {{ 'has-schedule' if day_schedule }}" data-schedule-date="{{ day.isoformat() }}" tabindex="0" title="{{ 'Открыть расписание и события' if current_user.is_admin else 'Открыть расписание' }}">
@@ -56,4 +57,4 @@
   <div class="offcanvas-body" data-panel-body><div class="panel-skeleton"><span></span><span></span><span></span></div></div>
 </div>
 {% endblock %}
-{% block scripts %}<script>window.CALENDAR_DATA={start:"{{ days[0].isoformat() }}",days:{{ days|length }},currentUserId:{{ current_user.id }},isAdmin:{{ current_user.is_admin|tojson }},groupName:{{ current_user.group_name|tojson }},initialScale:{{ view|tojson }},focusDate:{{ focus.isoformat()|tojson }}};</script><script src="{{ url_for('static', filename='js/calendar.js') }}"></script>{% endblock %}
+{% block scripts %}<script>window.CALENDAR_DATA={start:"{{ days[0].isoformat() }}",days:{{ days|length }},currentUserId:{{ current_user.id }},isAdmin:{{ current_user.is_admin|tojson }},groupName:{{ current_user.group_name|tojson }},initialScale:{{ view|tojson }},focusDate:{{ focus.isoformat()|tojson }},today:{{ today.isoformat()|tojson }}};</script><script src="{{ url_for('static', filename='js/calendar.js') }}"></script>{% endblock %}

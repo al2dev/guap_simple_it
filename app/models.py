@@ -123,6 +123,7 @@ class ScheduleItem(TimestampMixin, db.Model):
     subject = db.Column(db.String(160), nullable=False)
     teacher = db.Column(db.String(160), default="")
     room = db.Column(db.String(80), default="")
+    address = db.Column(db.String(160), default="")
     type = db.Column(db.String(40), nullable=False, default="Лекция")
     description = db.Column(db.Text, default="")
     group_name = db.Column(db.String(80), index=True)

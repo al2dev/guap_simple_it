@@ -5,7 +5,7 @@ from flask import current_app
 from sqlalchemy import func
 
 from .extensions import db
-from .models import Event, ScheduleItem, Tag, User
+from .models import Event, ScheduleImport, ScheduleItem, Tag, User
 
 
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -54,6 +54,8 @@ def ensure_initial_data():
         db.session.add(admin)
         db.session.flush()
 
+    if current_app.config.get("URL_GROUP_SCHEDULE"):
+        remove_legacy_demo_schedule(current_app.config["DEFAULT_GROUP"])
     if current_app.config["SEED_DEMO"]:
         seed_demo(admin)
     db.session.commit()
@@ -79,8 +81,23 @@ def seed_demo(admin):
             Event(title="Контрольная по математике", date=today + timedelta(days=2), start_time=parse_time("10:40"), type="Контрольная", color="#ef4444", location="302", group_name=group, created_by_id=admin.id),
             Event(title="Сдача лабораторной", date=today + timedelta(days=5), start_time=parse_time("12:20"), type="Лабораторная", color="#8b5cf6", location="214", group_name=group, created_by_id=admin.id),
         ])
-    if not db.session.scalar(db.select(ScheduleItem)):
+    if not current_app.config.get("URL_GROUP_SCHEDULE") and not db.session.scalar(db.select(ScheduleItem)):
         db.session.add_all([
             ScheduleItem(date=today, start_time=parse_time("09:00"), end_time=parse_time("10:30"), subject="Математика", teacher="А. В. Орлов", room="302", group_name=group),
             ScheduleItem(date=today, start_time=parse_time("10:40"), end_time=parse_time("12:10"), subject="Программирование", teacher="М. И. Соколов", room="214", group_name=group),
         ])
+
+
+def remove_legacy_demo_schedule(group):
+    """Remove old demo lessons that were recreated on date.today()."""
+    imported_ids = db.select(ScheduleImport.schedule_item_id).where(ScheduleImport.schedule_item_id.is_not(None))
+    items = db.session.scalars(db.select(ScheduleItem).where(
+        ScheduleItem.group_name == group,
+        ScheduleItem.id.not_in(imported_ids),
+        db.or_(
+            db.and_(ScheduleItem.subject == "Математика", ScheduleItem.start_time == parse_time("09:00"), ScheduleItem.room == "302"),
+            db.and_(ScheduleItem.subject == "Программирование", ScheduleItem.start_time == parse_time("10:40"), ScheduleItem.room == "214"),
+        ),
+    )).all()
+    for item in items:
+        db.session.delete(item)

@@ -8,6 +8,7 @@
   const title = panelEl.querySelector('[data-panel-title]');
   const dateLabel = panelEl.querySelector('[data-panel-date]');
   const monthLabel = document.querySelector('[data-visible-month]');
+  const namesButton = document.querySelector('[data-toggle-student-names]');
   const csrf = document.querySelector('meta[name="csrf-token"]').content;
   let activeCell = null;
   let activeDay = null;
@@ -42,7 +43,7 @@
 
   function scheduleCards(items) {
     if (!items.length) return empty('В расписании нет занятий');
-    return items.map(item => `<article class="schedule-panel-row"><time>${item.start_time}</time><span class="flex-grow-1"><strong>${esc(item.subject)}</strong><small>${esc(item.type)}${item.room ? ` · ауд. ${esc(item.room)}` : ''}${item.teacher ? ` · ${esc(item.teacher)}` : ''}</small>${item.description ? `<small>${esc(item.description)}</small>` : ''}</span>${window.CALENDAR_DATA.isAdmin ? `<button class="comment-delete" data-delete-schedule="${item.id}" title="Удалить занятие"><i class="bi bi-trash"></i></button>` : ''}</article>`).join('');
+    return items.map(item => `<article class="schedule-panel-row"><time>${item.start_time}</time><span class="flex-grow-1"><strong>${esc(item.subject)}</strong><small><b>Тип:</b> ${esc(item.type)}</small>${item.room ? `<small><b>Аудитория:</b> ${esc(item.room)}</small>` : ''}${item.address ? `<small><b>Адрес:</b> ${esc(item.address)}</small>` : ''}${item.teacher ? `<small><b>Преподаватель:</b> ${esc(item.teacher)}</small>` : ''}${item.description ? `<small>${esc(item.description)}</small>` : ''}</span>${window.CALENDAR_DATA.isAdmin ? `<button class="comment-delete" data-delete-schedule="${item.id}" title="Удалить занятие"><i class="bi bi-trash"></i></button>` : ''}</article>`).join('');
   }
 
   async function refreshDecorations() {
@@ -94,7 +95,7 @@
 
   function adminScheduleForm(day) {
     if (!window.CALENDAR_DATA.isAdmin) return '';
-    return `<section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-journal-plus"></i>Дополнительное занятие</h3><form class="add-tag-box" data-day-schedule-form><div class="mb-2"><label class="form-label">Предмет</label><input class="form-control" name="subject" maxlength="160" required placeholder="Название предмета"></div><div class="row g-2 mb-2"><div class="col-6"><label class="form-label">Начало</label><input class="form-control" type="time" name="start_time" required></div><div class="col-6"><label class="form-label">Окончание</label><input class="form-control" type="time" name="end_time"></div></div><div class="row g-2 mb-2"><div class="col-6"><label class="form-label">Тип</label><select class="form-select" name="type"><option>Лекция</option><option>Практическое занятие</option><option>Лабораторное занятие</option><option>Занятие</option></select></div><div class="col-6"><label class="form-label">Аудитория</label><input class="form-control" name="room" maxlength="80"></div></div><div class="mb-2"><label class="form-label">Преподаватель</label><input class="form-control" name="teacher" maxlength="160"></div><div class="mb-2"><label class="form-label">Описание</label><textarea class="form-control" name="description" rows="2"></textarea></div><input type="hidden" name="date" value="${day}"><button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Добавить занятие</button></form></section>`;
+    return `<section class="panel-section"><h3 class="panel-section-title"><i class="bi bi-journal-plus"></i>Дополнительное занятие</h3><form class="add-tag-box" data-day-schedule-form><div class="mb-2"><label class="form-label">Предмет</label><input class="form-control" name="subject" maxlength="160" required placeholder="Название предмета"></div><div class="row g-2 mb-2"><div class="col-6"><label class="form-label">Начало</label><input class="form-control" type="time" name="start_time" required></div><div class="col-6"><label class="form-label">Окончание</label><input class="form-control" type="time" name="end_time"></div></div><div class="row g-2 mb-2"><div class="col-6"><label class="form-label">Тип</label><select class="form-select" name="type"><option>Лекция</option><option>Практическое занятие</option><option>Лабораторное занятие</option><option>Занятие</option></select></div><div class="col-6"><label class="form-label">Аудитория</label><input class="form-control" name="room" maxlength="80"></div></div><div class="mb-2"><label class="form-label">Адрес</label><input class="form-control" name="address" maxlength="160" placeholder="Ленсовета 14"></div><div class="mb-2"><label class="form-label">Преподаватель</label><input class="form-control" name="teacher" maxlength="160"></div><div class="mb-2"><label class="form-label">Описание</label><textarea class="form-control" name="description" rows="2"></textarea></div><input type="hidden" name="date" value="${day}"><button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Добавить занятие</button></form></section>`;
   }
 
   async function openDay(day) {
@@ -128,12 +129,20 @@
   function scrollToDate(value, behavior='smooth') {
     const header = document.querySelector(`[data-schedule-date="${value}"]`);
     if (!header) return;
-    const studentWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--student-width')) || 230;
-    scroll.scrollTo({left:Math.max(0, header.offsetLeft - studentWidth - 12), behavior});
+    const studentWidth = document.querySelector('.calendar-table .student-column')?.offsetWidth || 0;
+    scroll.scrollTo({left:Math.max(0, header.offsetLeft - studentWidth), behavior});
+  }
+
+  function setStudentNamesHidden(hidden) {
+    scroll.classList.toggle('names-hidden', hidden);
+    if (!namesButton) return;
+    namesButton.setAttribute('aria-pressed', String(hidden));
+    namesButton.title = hidden ? 'Показать фамилии студентов' : 'Скрыть фамилии студентов';
+    namesButton.classList.toggle('active', hidden);
   }
 
   function applyScale(days, keepDate) {
-    const studentWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--student-width')) || 230;
+    const studentWidth = document.querySelector('.calendar-table .student-column')?.offsetWidth || parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--student-width')) || 230;
     const width = Math.max(44, Math.min(112, (scroll.clientWidth - studentWidth) / Number(days)));
     document.documentElement.style.setProperty('--day-width', `${width}px`);
     document.querySelectorAll('[data-calendar-scale]').forEach(button => button.classList.toggle('active', button.dataset.calendarScale === String(days)));
@@ -150,7 +159,13 @@
     header.addEventListener('click', open);
     header.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } });
   });
-  document.querySelector('[data-scroll-today]')?.addEventListener('click', () => scrollToDate(new Date().toISOString().slice(0, 10)));
+  document.querySelector('[data-scroll-today]')?.addEventListener('click', () => scrollToDate(window.CALENDAR_DATA.today));
+  namesButton?.addEventListener('click', () => {
+    const hidden = !scroll.classList.contains('names-hidden');
+    setStudentNamesHidden(hidden);
+    localStorage.setItem('calendar-student-names-hidden', String(hidden));
+    applyScale(localStorage.getItem('calendar-scale') || window.CALENDAR_DATA.initialScale, window.CALENDAR_DATA.focusDate);
+  });
   document.querySelectorAll('[data-calendar-scale]').forEach(button => button.addEventListener('click', () => applyScale(button.dataset.calendarScale, document.querySelector('.day-heading.today')?.dataset.scheduleDate)));
   scroll.addEventListener('scroll', updateVisibleMonth, {passive:true});
   window.addEventListener('resize', () => applyScale(localStorage.getItem('calendar-scale') || window.CALENDAR_DATA.initialScale, document.querySelector('.day-heading.today')?.dataset.scheduleDate));
@@ -216,6 +231,7 @@
     } catch (error) { toast(error.message, true); }
   });
 
+  setStudentNamesHidden(localStorage.getItem('calendar-student-names-hidden') === 'true');
   refreshDecorations();
   applyScale(localStorage.getItem('calendar-scale') || window.CALENDAR_DATA.initialScale);
   const params = new URLSearchParams(location.search);

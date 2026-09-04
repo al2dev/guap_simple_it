@@ -34,7 +34,7 @@ def serialize_event(event):
 
 
 def serialize_schedule(item):
-    return {"id": item.id, "date": iso_date(item.date), "start_time": iso_time(item.start_time), "end_time": iso_time(item.end_time), "subject": item.subject, "teacher": item.teacher, "room": item.room, "type": item.type, "description": item.description}
+    return {"id": item.id, "date": iso_date(item.date), "start_time": iso_time(item.start_time), "end_time": iso_time(item.end_time), "subject": item.subject, "teacher": item.teacher, "room": item.room, "address": item.address, "type": item.type, "description": item.description}
 
 
 @bp.get("/calendar")
@@ -257,6 +257,7 @@ def _admin_schedule_from_payload(item, data):
     item.subject = subject
     item.teacher = str(data.get("teacher", "")).strip()[:160]
     item.room = str(data.get("room", "")).strip()[:80]
+    item.address = str(data.get("address", "")).strip()[:160]
     item.type = str(data.get("type", "Занятие")).strip()[:40] or "Занятие"
     item.group_name = str(data.get("group_name", "")).strip()[:80] or None
     item.description = str(data.get("description", "")).strip()

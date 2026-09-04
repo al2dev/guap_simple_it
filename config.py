@@ -17,9 +17,10 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-me")
     SQLALCHEMY_DATABASE_URI = _database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    MAX_CONTENT_LENGTH = 20 * 1024 * 1024
+    MAX_MATERIAL_SIZE = int(os.getenv("MAX_MATERIAL_SIZE_MB", "20")) * 1024 * 1024
+    # Multipart fields and boundaries add a little data on top of the file itself.
+    MAX_CONTENT_LENGTH = MAX_MATERIAL_SIZE + 1024 * 1024
     MAX_AVATAR_SIZE = 3 * 1024 * 1024
-    MAX_MATERIAL_SIZE = 20 * 1024 * 1024
     UPLOAD_FOLDER = str(BASE_DIR / "uploads" / "avatars")
     MATERIAL_UPLOAD_FOLDER = str(BASE_DIR / "uploads" / "materials")
     ADMIN_LOGIN = os.getenv("ADMIN_LOGIN", "admin")

@@ -20,6 +20,15 @@ def test_login_logout_and_dashboard(client):
     assert client.get("/").status_code == 302
 
 
+def test_calendar_places_current_user_first(client):
+    login(client, "Ivanov", "ИВ-23")
+    page = client.get("/").get_data(as_text=True)
+    assert page.index("Иванов Иван") < page.index("Admin Test")
+
+    api_students = client.get("/api/calendar?days=1").get_json()["students"]
+    assert api_students[0]["name"] == "Иванов Иван"
+
+
 def test_student_can_tag_own_cell_but_not_another(client, app):
     login(client, "Ivanov", "ИВ-23")
     with app.app_context():

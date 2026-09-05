@@ -5,6 +5,7 @@ from pathlib import Path
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
 from flask_login import current_user, login_required
 from PIL import Image, UnidentifiedImageError
+from sqlalchemy import case
 from sqlalchemy.orm import selectinload
 from werkzeug.utils import secure_filename
 
@@ -31,7 +32,11 @@ def dashboard():
     days_count = 180
     start = focus - timedelta(days=30)
     days = [start + timedelta(days=i) for i in range(days_count)]
-    students = db.session.scalars(db.select(User).where(User.group_name == current_user.group_name).order_by(User.last_name, User.first_name)).all()
+    students = db.session.scalars(
+        db.select(User)
+        .where(User.group_name == current_user.group_name)
+        .order_by(case((User.id == current_user.id, 0), else_=1), User.last_name, User.first_name)
+    ).all()
     events = db.session.scalars(db.select(Event).where(Event.date.between(days[0], days[-1]), db.or_(Event.group_name == current_user.group_name, Event.group_name.is_(None)))).all()
     schedule = db.session.scalars(db.select(ScheduleItem).where(ScheduleItem.date.between(days[0], days[-1]), db.or_(ScheduleItem.group_name == current_user.group_name, ScheduleItem.group_name.is_(None)))).all()
     events_by_date = {}

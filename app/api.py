@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
-from sqlalchemy import func
+from sqlalchemy import case, func
 
 from .decorators import admin_required
 from .extensions import db
@@ -46,7 +46,11 @@ def calendar():
     except (ValueError, TypeError):
         return json_error("Некорректный диапазон дат")
     end = start + timedelta(days=days - 1)
-    students = db.session.scalars(db.select(User).where(User.group_name == current_user.group_name).order_by(User.last_name)).all()
+    students = db.session.scalars(
+        db.select(User)
+        .where(User.group_name == current_user.group_name)
+        .order_by(case((User.id == current_user.id, 0), else_=1), User.last_name, User.first_name)
+    ).all()
     tags = db.session.scalars(db.select(CellTag).join(User, CellTag.student_id == User.id).where(User.group_name == current_user.group_name, CellTag.date.between(start, end))).all()
     events = db.session.scalars(db.select(Event).where(Event.date.between(start, end), db.or_(Event.group_name == current_user.group_name, Event.group_name.is_(None)))).all()
     schedule = db.session.scalars(db.select(ScheduleItem).where(ScheduleItem.date.between(start, end), db.or_(ScheduleItem.group_name == current_user.group_name, ScheduleItem.group_name.is_(None)))).all()

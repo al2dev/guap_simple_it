@@ -150,6 +150,49 @@
     requestAnimationFrame(() => { scrollToDate(keepDate || window.CALENDAR_DATA.focusDate, 'auto'); updateVisibleMonth(); });
   }
 
+  function enableMouseDragScroll() {
+    let pointerId = null;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let dragged = false;
+    let suppressClick = false;
+
+    scroll.addEventListener('pointerdown', event => {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return;
+      pointerId = event.pointerId;
+      startX = event.clientX;
+      startScrollLeft = scroll.scrollLeft;
+      dragged = false;
+      scroll.setPointerCapture(pointerId);
+    });
+    scroll.addEventListener('pointermove', event => {
+      if (event.pointerId !== pointerId) return;
+      const distance = event.clientX - startX;
+      if (!dragged && Math.abs(distance) < 5) return;
+      dragged = true;
+      scroll.classList.add('is-dragging');
+      scroll.scrollLeft = startScrollLeft - distance;
+      event.preventDefault();
+    });
+    const finish = event => {
+      if (event.pointerId !== pointerId) return;
+      if (dragged) {
+        suppressClick = true;
+        requestAnimationFrame(() => { suppressClick = false; });
+      }
+      scroll.classList.remove('is-dragging');
+      if (scroll.hasPointerCapture(pointerId)) scroll.releasePointerCapture(pointerId);
+      pointerId = null;
+    };
+    scroll.addEventListener('pointerup', finish);
+    scroll.addEventListener('pointercancel', finish);
+    scroll.addEventListener('click', event => {
+      if (!suppressClick) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+  }
+
   document.querySelectorAll('.calendar-cell').forEach(cell => {
     cell.addEventListener('click', () => openCell(cell));
     cell.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openCell(cell); } });
@@ -167,6 +210,7 @@
     applyScale(localStorage.getItem('calendar-scale') || window.CALENDAR_DATA.initialScale, window.CALENDAR_DATA.focusDate);
   });
   document.querySelectorAll('[data-calendar-scale]').forEach(button => button.addEventListener('click', () => applyScale(button.dataset.calendarScale, document.querySelector('.day-heading.today')?.dataset.scheduleDate)));
+  enableMouseDragScroll();
   scroll.addEventListener('scroll', updateVisibleMonth, {passive:true});
   window.addEventListener('resize', () => applyScale(localStorage.getItem('calendar-scale') || window.CALENDAR_DATA.initialScale, document.querySelector('.day-heading.today')?.dataset.scheduleDate));
 

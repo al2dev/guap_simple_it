@@ -41,7 +41,7 @@
           </div>
           <div class="material-comments">
             <button class="comments-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#comments-{{ item.id }}"><i class="bi bi-chat-left-text"></i>{{ item.comments|length }} {{ 'комментарий' if item.comments|length == 1 else 'комментариев' }}<i class="bi bi-chevron-down ms-auto"></i></button>
-            <div class="collapse {{ 'show' if request.args.get('material', type=int) == item.id }}" id="comments-{{ item.id }}">
+            <div class="collapse {{ 'show' if selected_material_id == item.id }}" id="comments-{{ item.id }}">
               <div class="material-comment-list">
                 {% for comment in item.comments %}<div class="material-comment"><span class="comment-avatar">{{ comment.author.initials }}</span><div><strong>{{ comment.author.full_name }}</strong><small>{{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</small><p>{{ comment.text }}</p></div>{% if current_user.is_admin or comment.author_id == current_user.id %}<form class="ms-auto" method="post" action="{{ url_for('main.delete_material_comment', comment_id=comment.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="comment-delete"><i class="bi bi-x-lg"></i></button></form>{% endif %}</div>{% else %}<div class="panel-empty">Обсуждение пока пусто</div>{% endfor %}
               </div>

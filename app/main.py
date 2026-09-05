@@ -285,7 +285,8 @@ def materials():
     subjects = db.session.scalars(db.select(Subject).where(Subject.group_name == current_user.group_name).order_by(Subject.name)).unique().all()
     selected_id = request.args.get("subject", type=int)
     selected = next((item for item in subjects if item.id == selected_id), None) or (subjects[0] if subjects else None)
-    return render_template("materials.html", subjects=subjects, selected=selected)
+    selected_material_id = request.args.get("material", type=int)
+    return render_template("materials.html", subjects=subjects, selected=selected, selected_material_id=selected_material_id)
 
 
 @bp.post("/materials/subjects")

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Посещаемость — Student Dashboard{% endblock %}
+{% block content %}
+<main class="content-wrap admin-wrap">
+  <div class="page-heading"><h1>Посещаемость сервиса</h1><p>Открытия страниц авторизованными пользователями. Даты и время — UTC.</p></div>
+  {% include 'admin/_nav.html' %}
+  <section class="surface-card mb-4">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-sm-3"><label for="metrics-start" class="form-label">С</label><input id="metrics-start" name="start" type="date" class="form-control" value="{{ start.isoformat() }}" required></div>
+      <div class="col-sm-3"><label for="metrics-end" class="form-label">По</label><input id="metrics-end" name="end" type="date" class="form-control" value="{{ end.isoformat() }}" required></div>
+      <div class="col-sm-4"><label for="metrics-student" class="form-label">Пользователи</label><select id="metrics-student" name="student" class="form-select"><option value="">Все пользователи</option>{% for student in choices %}<option value="{{ student.id }}" {{ 'selected' if student.id == student_id }}>{{ student.full_name }} · {{ student.login }} · {{ student.group_name }}</option>{% endfor %}</select></div>
+      <div class="col-sm-2"><button class="btn btn-primary" type="submit">Показать</button></div>
+    </form>
+    <p class="text-secondary mt-3 mb-0">Период до 366 дней включительно. Общая статистика включает администраторов. Каждый просмотр, в том числе повторный, учитывается отдельно. Фоновые запросы, файлы и эта страница не учитываются. Сбор начинается после установки обновления.</p>
+  </section>
+  <div class="stats-grid">
+    <article class="stat-card"><span class="stat-icon blue"><i class="bi bi-eye"></i></span><span><small>Просмотры страниц</small><strong>{{ summary.views }}</strong></span></article>
+    <article class="stat-card"><span class="stat-icon violet"><i class="bi bi-people"></i></span><span><small>Уникальные пользователи</small><strong>{{ summary.users }}</strong></span></article>
+  </div>
+  <section class="surface-card mb-4">
+    <div class="section-title"><h2>По студентам</h2></div>
+    <div class="table-responsive"><table class="table align-middle">
+      <thead><tr><th>Студент</th><th>Группа</th><th>Просмотры</th><th>Активные дни</th><th>Первый просмотр за период</th><th>Последний просмотр за период</th></tr></thead>
+      <tbody>{% for row in students %}<tr>
+        <td><a href="{{ url_for('admin.metrics', start=start.isoformat(), end=end.isoformat(), student=row.User.id) }}">{{ row.User.full_name }}</a><div class="text-secondary">{{ row.User.login }}</div></td>
+        <td>{{ row.User.group_name }}</td><td>{{ row.views }}</td><td>{{ row.days }}</td>
+        <td>{{ row.first_seen.strftime('%d.%m.%Y %H:%M') if row.first_seen else 'Нет посещений' }}</td>
+        <td>{{ row.last_seen.strftime('%d.%m.%Y %H:%M') if row.last_seen else 'Нет посещений' }}</td>
+      </tr>{% else %}<tr><td colspan="6">Студентов нет</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section class="surface-card">
+    <div class="section-title"><h2>Динамика по дням</h2></div>
+    {% if not summary.views %}<p class="text-secondary">За выбранный период посещений нет.</p>{% endif %}
+    <div class="table-responsive"><table class="table"><thead><tr><th>Дата</th><th>Просмотры</th><th>Уникальные пользователи</th></tr></thead><tbody>
+      {% for row in daily|reverse %}<tr><td>{{ row.date.strftime('%d.%m.%Y') }}</td><td>{{ row.views }}</td><td>{{ row.users }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</main>
+{% endblock %}

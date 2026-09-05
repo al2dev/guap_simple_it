@@ -29,11 +29,13 @@ def create_app(config_object=Config):
     from .auth import bp as auth_bp
     from .main import bp as main_bp
     from .models import Notification, User
+    from .metrics import record_page_view
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(admin_bp)
+    app.after_request(record_page_view)
 
     from .realtime import register_handlers
     register_handlers()

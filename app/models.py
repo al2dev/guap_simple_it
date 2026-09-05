@@ -33,6 +33,10 @@ class User(UserMixin, TimestampMixin, db.Model):
         return self.role == "ADMIN"
 
     @property
+    def can_view_metrics(self):
+        return self.is_admin and self.login == "admin"
+
+    @property
     def full_name(self):
         return f"{self.last_name} {self.first_name}".strip()
 
@@ -45,6 +49,15 @@ class User(UserMixin, TimestampMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+
+class PageView(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    endpoint = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    user = db.relationship("User", backref=db.backref("page_views", cascade="all, delete-orphan"))
+    __table_args__ = (db.Index("ix_page_view_user_created", "user_id", "created_at"),)
 
 
 class Tag(TimestampMixin, db.Model):

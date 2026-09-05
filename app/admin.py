@@ -10,9 +10,11 @@ from .models import Event, Notification, ScheduleItem, Tag, User
 from .notifications import notify_group
 from .services import unique_login, valid_color
 from .schedule_import import cancel_or_delete_schedule
+from .metrics import metrics
 
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
+bp.add_url_rule("/metrics", view_func=metrics)
 
 
 @bp.get("")

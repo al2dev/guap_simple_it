@@ -229,6 +229,12 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
+Проверки панели уведомлений в JavaScript (требуется Node.js):
+
+```bash
+node --test tests/js/notifications.test.cjs
+```
+
 ## Структура
 
 ```text

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Общий чат — Student Dashboard{% endblock %}
+{% block body_class %}chat-page-body{% endblock %}
+{% block content %}
+<main class="chat-page">
+  <section class="chat-shell">
+    <header class="chat-topbar">
+      <span class="chat-group-avatar"><i class="bi bi-people-fill"></i></span>
+      <div><h1>Общий чат</h1><p>{{ current_user.group_name }} · @all оповестит всю группу</p></div>
+    </header>
+
+    <div class="chat-feed" data-chat-feed>
+      {% for message in messages %}
+      <article class="chat-message-row {{ 'mine' if message.author_id == current_user.id }}" id="message-{{ message.id }}" data-message-id="{{ message.id }}">
+        {% if message.author_id != current_user.id %}<span class="comment-avatar chat-avatar">{{ message.author.initials }}</span>{% endif %}
+        <div class="chat-bubble">
+          {% if message.author_id != current_user.id %}<strong class="chat-author">{{ message.author.full_name }}</strong>{% endif %}
+          <div class="chat-text">{{ message.text }}</div>
+          <footer>
+            <button class="chat-reply-link" type="button" data-open-thread="{{ message.id }}" data-bs-toggle="offcanvas" data-bs-target="#chatThreadPanel"><i class="bi bi-reply"></i><span>Ответить</span><span class="chat-reply-dot" aria-hidden="true"></span><span class="chat-reply-count" data-reply-count-for="{{ message.id }}">{{ message.replies|length }}</span></button>
+            <time>{{ message.created_at.strftime('%H:%M') }}</time>
+            {% if current_user.is_admin or message.author_id == current_user.id %}<form method="post" action="{{ url_for('main.delete_chat_message', message_id=message.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="chat-delete" title="Удалить сообщение"><i class="bi bi-trash"></i></button></form>{% endif %}
+          </footer>
+        </div>
+      </article>
+      {% else %}<div class="chat-empty"><i class="bi bi-chat-square-dots"></i><strong>Чат пока пуст</strong><span>Начните первое обсуждение группы</span></div>{% endfor %}
+    </div>
+    <button class="chat-new-messages d-none" type="button" data-new-messages><i class="bi bi-arrow-down"></i><span>Новые сообщения</span></button>
+
+    <form class="chat-compose" method="post" action="{{ url_for('main.add_chat_message') }}" data-chat-compose>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <textarea class="form-control" name="text" maxlength="4000" rows="1" required aria-label="Сообщение" placeholder="Сообщение…"></textarea>
+      <button class="chat-send" aria-label="Отправить"><i class="bi bi-send-fill"></i></button>
+    </form>
+  </section>
+</main>
+
+<aside class="offcanvas offcanvas-end chat-thread-panel" tabindex="-1" id="chatThreadPanel" aria-labelledby="chatThreadTitle">
+  <div class="offcanvas-header"><div><h2 id="chatThreadTitle">Ответы</h2><small data-thread-subtitle>Тред сообщения</small></div><button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button></div>
+  <div class="chat-thread-body" data-thread-body><div class="notification-empty">Выберите сообщение</div></div>
+  <form class="chat-thread-compose" data-thread-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <textarea class="form-control" name="text" maxlength="2000" rows="1" required placeholder="Ответить…"></textarea>
+    <button class="chat-send" aria-label="Отправить ответ"><i class="bi bi-send-fill"></i></button>
+  </form>
+</aside>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/chat.js') }}"></script>{% endblock %}

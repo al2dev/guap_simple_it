@@ -103,16 +103,48 @@ class Notification(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     actor_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
     comment_id = db.Column(db.Integer, db.ForeignKey("comment.id", ondelete="CASCADE"))
-    student_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    date = db.Column(db.Date, nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    date = db.Column(db.Date)
     text = db.Column(db.String(255), nullable=False)
+    kind = db.Column(db.String(40), nullable=False, default="mention", index=True)
+    target_url = db.Column(db.String(1000), default="")
     is_read = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    read_at = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
     user = db.relationship("User", foreign_keys=[user_id], backref=db.backref("notifications", lazy=True, cascade="all, delete-orphan"))
     actor = db.relationship("User", foreign_keys=[actor_id])
     comment = db.relationship("Comment")
     student = db.relationship("User", foreign_keys=[student_id])
+
+    @property
+    def resolved_target_url(self):
+        if self.target_url:
+            return self.target_url
+        if self.student_id and self.date:
+            value = self.date.isoformat()
+            return f"/?start={value}&open_student={self.student_id}&open_date={value}"
+        return "/"
+
+
+class ChatMessage(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_name = db.Column(db.String(80), nullable=False, index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+
+    author = db.relationship("User")
+    replies = db.relationship("ChatReply", back_populates="message", cascade="all, delete-orphan", order_by="ChatReply.created_at")
+
+
+class ChatReply(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+
+    message = db.relationship("ChatMessage", back_populates="replies")
+    author = db.relationship("User")
 
 
 class ScheduleItem(TimestampMixin, db.Model):

@@ -237,8 +237,11 @@
   const params = new URLSearchParams(location.search);
   const openStudent = params.get('open_student');
   const openDate = params.get('open_date');
+  const openDayDate = params.get('open_day');
   if (openStudent && openDate) {
     const target = document.querySelector(`.calendar-cell[data-student-id="${openStudent}"][data-date="${openDate}"]`);
     if (target) setTimeout(() => openCell(target), 150);
+  } else if (openDayDate) {
+    setTimeout(() => openDay(openDayDate), 150);
   }
 })();

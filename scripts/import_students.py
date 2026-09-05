@@ -7,6 +7,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import sys
 from http.cookiejar import CookieJar
 from html.parser import HTMLParser
@@ -39,6 +40,65 @@ def _tokens(html: str) -> CsrfTokenParser:
 
 def _read_response(response: Any) -> str:
     return response.read().decode(response.headers.get_content_charset() or "utf-8")
+
+
+def _import_through_admin_form(opener: Any, base_url: str, students: list[Any], timeout: float) -> dict[str, Any]:
+    """Compatibility path for a server that has not deployed the bulk API yet."""
+    form_url = urljoin(base_url, "admin/students")
+    with opener.open(form_url, timeout=timeout) as response:
+        form_token = _tokens(_read_response(response)).form_token
+    if not form_token:
+        raise RuntimeError("На странице /admin/students не найдена форма добавления пользователя")
+
+    created: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for index, row in enumerate(students):
+        if not isinstance(row, dict):
+            errors.append({"index": index, "error": "Запись должна быть JSON-объектом"})
+            continue
+        try:
+            first_name = str(row.get("name", "")).strip()
+            last_name = str(row.get("surname", "")).strip()
+            group_name = str(row.get("group", "")).strip()
+            password = str(row.get("pass", "")).strip()
+            role = str(row.get("role", "student")).strip().upper()
+            if not first_name or not last_name or not group_name:
+                raise ValueError("Обязательны поля name, surname и group")
+            if len(password) < 5 or len(password) > 128:
+                raise ValueError("Пароль должен содержать от 5 до 128 символов")
+            if role not in {"STUDENT", "ADMIN"}:
+                raise ValueError("role должен быть student или admin")
+
+            form_data = urlencode({
+                "first_name": first_name,
+                "last_name": last_name,
+                "group_name": group_name,
+                "password": password,
+                "role": role,
+                "submit": "Сохранить",
+                "csrf_token": form_token,
+            }).encode("utf-8")
+            request = Request(form_url, data=form_data, method="POST")
+            request.add_header("Content-Type", "application/x-www-form-urlencoded")
+            with opener.open(request, timeout=timeout) as response:
+                html = _read_response(response)
+            match = re.search(r"добавлен\.\s*Логин:\s*([^\s<]+)", html, re.IGNORECASE)
+            if not match:
+                raise ValueError("Сервер отклонил запись; проверьте поля в админ-панели")
+            created.append({
+                "index": index, "login": match.group(1), "name": first_name,
+                "surname": last_name, "group": group_name, "role": role.lower(),
+            })
+        except (HTTPError, TypeError, ValueError) as error:
+            errors.append({"index": index, "error": str(error)})
+
+    return {
+        "created": created,
+        "skipped": [],
+        "errors": errors,
+        "compatibility_mode": True,
+        "totals": {"received": len(students), "created": len(created), "skipped": 0, "errors": len(errors)},
+    }
 
 
 def import_students(
@@ -94,6 +154,8 @@ def import_students(
         with opener.open(request, timeout=timeout) as response:
             result = json.loads(_read_response(response))
     except HTTPError as error:
+        if error.code == 404:
+            return _import_through_admin_form(opener, base_url, students, timeout)
         details = error.read().decode("utf-8", errors="replace")
         try:
             message = json.loads(details).get("error", details)
@@ -123,6 +185,8 @@ def main() -> int:
         return 1
 
     totals = result.get("totals", {})
+    if result.get("compatibility_mode"):
+        print("Bulk API на сервере не найден; использована совместимая форма /admin/students.")
     print(f"Создано: {totals.get('created', 0)}; пропущено: {totals.get('skipped', 0)}; ошибок: {totals.get('errors', 0)}")
     for item in result.get("created", []):
         print(f"  + строка {item['index'] + 1}: {item['surname']} {item['name']} — логин {item['login']}")

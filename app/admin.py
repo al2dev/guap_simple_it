@@ -7,6 +7,7 @@ from .decorators import admin_required
 from .extensions import db
 from .forms import EventForm, ScheduleForm, StudentForm, TagForm
 from .models import Event, Notification, ScheduleItem, Tag, User
+from .notifications import notify_group
 from .services import unique_login, valid_color
 from .schedule_import import cancel_or_delete_schedule
 
@@ -99,6 +100,8 @@ def events():
         item = Event(created_by_id=current_user.id)
         _fill_event(item, form)
         db.session.add(item)
+        db.session.flush()
+        notify_group(actor=current_user, group_name=item.group_name or current_user.group_name, kind="event_created", text=f"Добавлено событие «{item.title}»", target_url=f"/?focus={item.date.isoformat()}&open_day={item.date.isoformat()}")
         db.session.commit()
         flash("Событие добавлено", "success")
         return redirect(url_for("admin.events"))
@@ -126,6 +129,7 @@ def edit_event(item_id):
     form = EventForm(obj=item)
     if form.validate_on_submit():
         _fill_event(item, form)
+        notify_group(actor=current_user, group_name=item.group_name or current_user.group_name, kind="event_updated", text=f"Обновлено событие «{item.title}»", target_url=f"/?focus={item.date.isoformat()}&open_day={item.date.isoformat()}")
         db.session.commit()
         flash("Событие обновлено", "success")
         return redirect(url_for("admin.events"))
@@ -136,7 +140,10 @@ def edit_event(item_id):
 @login_required
 @admin_required
 def delete_event(item_id):
-    db.session.delete(db.get_or_404(Event, item_id))
+    item = db.get_or_404(Event, item_id)
+    title, target_date, group_name = item.title, item.date, item.group_name or current_user.group_name
+    db.session.delete(item)
+    notify_group(actor=current_user, group_name=group_name, kind="event_deleted", text=f"Удалено событие «{title}»", target_url=f"/?focus={target_date.isoformat()}&open_day={target_date.isoformat()}")
     db.session.commit()
     flash("Событие удалено", "success")
     return redirect(url_for("admin.events"))
@@ -152,6 +159,8 @@ def schedule():
         _fill_schedule(item, form)
         item.group_name = current_user.group_name
         db.session.add(item)
+        db.session.flush()
+        notify_group(actor=current_user, group_name=item.group_name or current_user.group_name, kind="schedule_created", text=f"Добавлено занятие «{item.subject}»", target_url=f"/?focus={item.date.isoformat()}&open_day={item.date.isoformat()}")
         db.session.commit()
         flash("Занятие добавлено", "success")
         return redirect(url_for("admin.schedule"))
@@ -182,6 +191,7 @@ def edit_schedule(item_id):
     form = ScheduleForm(obj=item)
     if form.validate_on_submit():
         _fill_schedule(item, form)
+        notify_group(actor=current_user, group_name=item.group_name or current_user.group_name, kind="schedule_updated", text=f"Обновлено занятие «{item.subject}»", target_url=f"/?focus={item.date.isoformat()}&open_day={item.date.isoformat()}")
         db.session.commit()
         flash("Занятие обновлено", "success")
         return redirect(url_for("admin.schedule"))
@@ -192,7 +202,10 @@ def edit_schedule(item_id):
 @login_required
 @admin_required
 def delete_schedule(item_id):
-    cancel_or_delete_schedule(db.get_or_404(ScheduleItem, item_id))
+    item = db.get_or_404(ScheduleItem, item_id)
+    subject, target_date, group_name = item.subject, item.date, item.group_name or current_user.group_name
+    cancel_or_delete_schedule(item)
+    notify_group(actor=current_user, group_name=group_name, kind="schedule_deleted", text=f"Удалено занятие «{subject}»", target_url=f"/?focus={target_date.isoformat()}&open_day={target_date.isoformat()}")
     db.session.commit()
     flash("Занятие удалено", "success")
     return redirect(url_for("admin.schedule"))

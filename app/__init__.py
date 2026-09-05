@@ -5,7 +5,7 @@ from flask_login import current_user
 
 from config import Config
 
-from .extensions import csrf, db, login_manager, migrate
+from .extensions import csrf, db, login_manager, migrate, socketio
 
 
 def create_app(config_object=Config):
@@ -19,6 +19,7 @@ def create_app(config_object=Config):
     login_manager.init_app(app)
     migrate.init_app(app, db)
     csrf.init_app(app)
+    socketio.init_app(app)
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Войдите, чтобы продолжить."
     login_manager.login_message_category = "warning"
@@ -33,6 +34,9 @@ def create_app(config_object=Config):
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(admin_bp)
+
+    from .realtime import register_handlers
+    register_handlers()
 
     @login_manager.user_loader
     def load_user(user_id):

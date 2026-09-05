@@ -11,4 +11,4 @@ RUN mkdir -p /app/instance /app/uploads/avatars /app/uploads/materials && chown 
 USER app
 
 EXPOSE 5000
-CMD ["sh", "-c", "flask --app wsgi:app db upgrade && flask --app wsgi:app init-data && exec gunicorn --bind 0.0.0.0:5000 --workers 2 --access-logfile - wsgi:app"]
+CMD ["sh", "-c", "flask --app wsgi:app db upgrade && flask --app wsgi:app init-data && exec gunicorn --bind 0.0.0.0:5000 --workers 1 --threads 100 --access-logfile - wsgi:app"]

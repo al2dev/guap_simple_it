@@ -1,4 +1,3 @@
-import re
 from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
@@ -7,13 +6,14 @@ from sqlalchemy import func
 
 from .decorators import admin_required
 from .extensions import db
-from .models import CellTag, Comment, Event, Notification, ScheduleItem, Tag, User, iso_date, iso_time
+from .models import CellTag, Comment, Event, Notification, ScheduleItem, Tag, User, iso_date, iso_time, utcnow
+from .notifications import create_notifications, mark_read, mentioned_user_ids, notify_group, serialize_notification
+from .realtime import queue_socket_event, user_room
 from .services import parse_date, parse_time, valid_color
 from .schedule_import import cancel_or_delete_schedule
 
 
 bp = Blueprint("api", __name__, url_prefix="/api")
-MENTION_RE = re.compile(r"@([A-Za-zА-Яа-яЁё0-9_.-]+)")
 
 
 def json_error(message, status=400):
@@ -156,13 +156,14 @@ def add_comment(student_id, date_value):
             recipient = None
         if recipient:
             recipients.add(recipient.id)
-    mentions = {m.lower() for m in MENTION_RE.findall(text)}
-    if mentions:
-        matched = db.session.scalars(db.select(User).where(User.group_name == current_user.group_name, func.lower(User.login).in_(mentions))).all()
-        recipients.update(user.id for user in matched)
+    recipients.update(mentioned_user_ids(text, current_user.group_name, exclude_id=current_user.id))
     recipients.discard(current_user.id)
-    for user_id in recipients:
-        db.session.add(Notification(user_id=user_id, actor_id=current_user.id, comment_id=comment.id, student_id=student_id, date=cell_date, text=f"{current_user.full_name}: {text[:180]}"))
+    create_notifications(
+        recipients, actor=current_user, kind="calendar_mention",
+        text=f"{current_user.full_name}: {text[:180]}",
+        target_url=f"/?start={cell_date.isoformat()}&open_student={student_id}&open_date={cell_date.isoformat()}",
+        comment_id=comment.id, student_id=student_id, date=cell_date,
+    )
     db.session.commit()
     return jsonify(id=comment.id, author=current_user.full_name, text=text, created_at=comment.created_at.isoformat()), 201
 
@@ -175,6 +176,7 @@ def delete_comment(comment_id):
         return json_error("Комментарий не найден", 404)
     if not (current_user.is_admin or comment.author_id == current_user.id):
         return json_error("Недостаточно прав", 403)
+    db.session.execute(db.update(Notification).where(Notification.comment_id == comment.id).values(comment_id=None))
     db.session.delete(comment)
     db.session.commit()
     return "", 204
@@ -206,9 +208,14 @@ def day_details(date_value):
 @bp.get("/notifications")
 @login_required
 def notifications():
-    items = db.session.scalars(db.select(Notification).where(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(20)).all()
+    status = request.args.get("status", "active")
+    condition = Notification.is_read.is_(True) if status == "history" else Notification.is_read.is_(False)
+    order = Notification.read_at.desc() if status == "history" else Notification.created_at.desc()
+    items = db.session.scalars(db.select(Notification).where(Notification.user_id == current_user.id, condition).order_by(order, Notification.created_at.desc()).limit(100)).all()
     unread = db.session.scalar(db.select(func.count(Notification.id)).where(Notification.user_id == current_user.id, Notification.is_read.is_(False))) or 0
-    return jsonify(unread=unread, notifications=[{"id": x.id, "text": x.text, "date": iso_date(x.date), "student_id": x.student_id, "is_read": x.is_read, "created_at": x.created_at.isoformat()} for x in items])
+    response = jsonify(unread=unread, notifications=[serialize_notification(item) for item in items])
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.post("/notifications/<int:notification_id>/read")
@@ -217,15 +224,22 @@ def read_notification(notification_id):
     item = db.session.get(Notification, notification_id)
     if not item or item.user_id != current_user.id:
         return json_error("Уведомление не найдено", 404)
-    item.is_read = True
+    mark_read(item)
+    queue_socket_event("notification:read", serialize_notification(item), user_room(current_user.id))
     db.session.commit()
-    return jsonify(ok=True, student_id=item.student_id, date=iso_date(item.date))
+    return jsonify(ok=True, target_url=item.resolved_target_url)
 
 
 @bp.post("/notifications/read-all")
 @login_required
 def read_all_notifications():
-    db.session.execute(db.update(Notification).where(Notification.user_id == current_user.id).values(is_read=True))
+    unread_ids = db.session.scalars(
+        db.select(Notification.id).where(
+            Notification.user_id == current_user.id, Notification.is_read.is_(False)
+        )
+    ).all()
+    db.session.execute(db.update(Notification).where(Notification.user_id == current_user.id, Notification.is_read.is_(False)).values(is_read=True, read_at=utcnow()))
+    queue_socket_event("notification:read_all", {"ids": unread_ids}, user_room(current_user.id))
     db.session.commit()
     return jsonify(ok=True)
 
@@ -274,6 +288,8 @@ def api_create_event():
     except (ValueError, TypeError):
         return json_error("Некорректные данные события")
     db.session.add(event)
+    db.session.flush()
+    notify_group(actor=current_user, group_name=event.group_name or current_user.group_name, kind="event_created", text=f"Добавлено событие «{event.title}»", target_url=f"/?focus={event.date.isoformat()}&open_day={event.date.isoformat()}")
     db.session.commit()
     return jsonify(serialize_event(event)), 201
 
@@ -289,6 +305,7 @@ def api_update_event(event_id):
         _admin_event_from_payload(event, request.get_json(silent=True) or {})
     except (ValueError, TypeError):
         return json_error("Некорректные данные события")
+    notify_group(actor=current_user, group_name=event.group_name or current_user.group_name, kind="event_updated", text=f"Обновлено событие «{event.title}»", target_url=f"/?focus={event.date.isoformat()}&open_day={event.date.isoformat()}")
     db.session.commit()
     return jsonify(serialize_event(event))
 
@@ -300,7 +317,9 @@ def api_delete_event(event_id):
     event = db.session.get(Event, event_id)
     if not event:
         return json_error("Событие не найдено", 404)
+    title, target_date, group_name = event.title, event.date, event.group_name or current_user.group_name
     db.session.delete(event)
+    notify_group(actor=current_user, group_name=group_name, kind="event_deleted", text=f"Удалено событие «{title}»", target_url=f"/?focus={target_date.isoformat()}&open_day={target_date.isoformat()}")
     db.session.commit()
     return "", 204
 
@@ -315,6 +334,8 @@ def api_create_schedule():
     except (ValueError, TypeError) as error:
         return json_error(str(error) or "Некорректные данные занятия")
     db.session.add(item)
+    db.session.flush()
+    notify_group(actor=current_user, group_name=item.group_name or current_user.group_name, kind="schedule_created", text=f"Добавлено занятие «{item.subject}»", target_url=f"/?focus={item.date.isoformat()}&open_day={item.date.isoformat()}")
     db.session.commit()
     return jsonify(serialize_schedule(item)), 201
 
@@ -326,6 +347,8 @@ def api_delete_schedule(item_id):
     item = db.session.get(ScheduleItem, item_id)
     if not item:
         return json_error("Занятие не найдено", 404)
+    subject, target_date, group_name = item.subject, item.date, item.group_name or current_user.group_name
     cancel_or_delete_schedule(item)
+    notify_group(actor=current_user, group_name=group_name, kind="schedule_deleted", text=f"Удалено занятие «{subject}»", target_url=f"/?focus={target_date.isoformat()}&open_day={target_date.isoformat()}")
     db.session.commit()
     return "", 204

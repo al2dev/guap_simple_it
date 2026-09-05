@@ -5,7 +5,8 @@ from pathlib import Path
 from PIL import Image
 
 from app.extensions import db
-from app.models import Event, Material, MaterialComment, Notification, ScheduleImport, ScheduleItem, Subject, Tag, User
+from app.extensions import socketio
+from app.models import ChatMessage, ChatReply, Event, Material, MaterialComment, Notification, ScheduleImport, ScheduleItem, Subject, Tag, User
 from app.schedule_import import parse_schedule_page, sync_schedule
 from tests.conftest import login
 from app.services import ensure_initial_data, unique_login
@@ -244,3 +245,122 @@ def test_material_upload_rejects_file_over_configured_limit(client, app):
     assert response.status_code == 302
     with app.app_context():
         assert db.session.scalar(db.select(db.func.count(Material.id)).where(Material.subject_id == subject_id)) == 0
+
+
+def test_general_chat_keeps_replies_inside_message_and_mentions_all(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    created = client.post("/chat/messages", data={"text": "@all Завтра встречаемся в 10:00"})
+    assert created.status_code == 302
+    with app.app_context():
+        message = db.session.scalar(db.select(ChatMessage))
+        message_id = message.id
+        notification = db.session.scalar(db.select(Notification).where(Notification.kind == "chat_mention"))
+        assert notification and notification.target_url == f"/chat#message-{message_id}"
+    reply = client.post(f"/chat/messages/{message_id}/replies", data={"text": "Буду"})
+    assert reply.status_code == 302
+    with app.app_context():
+        stored = db.session.scalar(db.select(ChatReply))
+        assert stored.message_id == message_id
+    thread = client.get(f"/chat/messages/{message_id}/thread")
+    assert thread.status_code == 200
+    assert thread.get_json()["replies"][0]["text"] == "Буду"
+    page = client.get("/chat")
+    assert page.status_code == 200
+    assert b'id="message-' + str(message_id).encode() + b'"' in page.data
+    assert b'data-open-thread=' in page.data
+    assert b'>\xd0\x9a\xd0\xb0\xd0\xbb\xd0\xb5\xd0\xbd\xd0\xb4\xd0\xb0\xd1\x80\xd1\x8c<' in page.data
+
+
+def test_chat_messages_are_rendered_oldest_first(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    client.post("/chat/messages", data={"text": "Первое сообщение"})
+    client.post("/chat/messages", data={"text": "Второе сообщение"})
+    page = client.get("/chat")
+    assert page.data.index("Первое сообщение".encode()) < page.data.index("Второе сообщение".encode())
+
+
+def test_chat_message_can_be_sent_without_page_reload(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    created = client.post(
+        "/chat/messages", data={"text": "Сообщение в реальном времени"},
+        headers={"Accept": "application/json"},
+    )
+    assert created.status_code == 201
+    message = created.get_json()["message"]
+    assert message["text"] == "Сообщение в реальном времени"
+    assert message["mine"] is True
+
+
+def test_websocket_pushes_chat_replies_counts_and_notifications(app):
+    recipient_http = app.test_client()
+    login(recipient_http, "admin", "change-me")
+    recipient_socket = socketio.test_client(app, flask_test_client=recipient_http)
+    assert recipient_socket.is_connected()
+    recipient_socket.get_received()
+
+    author_http = app.test_client()
+    login(author_http, "Ivanov", "ИВ-23")
+    created = author_http.post(
+        "/chat/messages", data={"text": "@all WebSocket сообщение"},
+        headers={"Accept": "application/json"},
+    )
+    assert created.status_code == 201
+    message_id = created.get_json()["message"]["id"]
+    received = recipient_socket.get_received()
+    assert any(item["name"] == "chat:message_created" and item["args"][0]["id"] == message_id for item in received)
+    assert any(item["name"] == "notification:new" and item["args"][0]["kind"] == "chat_mention" for item in received)
+
+    reply = author_http.post(
+        f"/chat/messages/{message_id}/replies", data={"text": "Ответ через WebSocket"},
+        headers={"Accept": "application/json"},
+    )
+    assert reply.status_code == 201
+    received = recipient_socket.get_received()
+    event = next(item for item in received if item["name"] == "chat:reply_created")
+    assert event["args"][0]["message_id"] == message_id
+    assert event["args"][0]["reply_count"] == 1
+
+    snapshot = recipient_socket.emit(
+        "chat:sync", {"after_id": 0, "message_ids": [message_id]}, callback=True
+    )
+    assert snapshot["reply_counts"][str(message_id)] == 1
+    recipient_socket.disconnect()
+
+
+def test_websocket_rejects_anonymous_connection(app):
+    anonymous_socket = socketio.test_client(app)
+    assert not anonymous_socket.is_connected()
+
+
+def test_notification_panel_moves_seen_item_to_history(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    client.post("/chat/messages", data={"text": "@all Важное сообщение"})
+    client.post("/logout")
+    login(client, "admin", "change-me")
+    active_response = client.get("/api/notifications?status=active")
+    assert active_response.headers["Cache-Control"] == "no-store"
+    active = active_response.get_json()
+    assert active["unread"] == 1
+    assert active["notifications"][0]["kind"] == "chat_mention"
+    notification_id = active["notifications"][0]["id"]
+    opened = client.post(f"/api/notifications/{notification_id}/read").get_json()
+    assert opened["target_url"].startswith("/chat#message-")
+    assert client.get("/api/notifications?status=active").get_json()["notifications"] == []
+    history = client.get("/api/notifications?status=history").get_json()["notifications"]
+    assert history[0]["id"] == notification_id
+    assert history[0]["read_at"] is not None
+
+
+def test_material_and_calendar_changes_create_linked_notifications(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    client.post("/materials/subjects", data={"name": "Сети"})
+    with app.app_context():
+        subject = db.session.scalar(db.select(Subject).where(Subject.name == "Сети"))
+        assert db.session.scalar(db.select(Notification).where(Notification.kind == "subject_created")).target_url == f"/materials?subject={subject.id}"
+    client.post("/logout")
+    login(client, "admin", "change-me")
+    payload = {"title": "Собрание", "date": date.today().isoformat(), "type": "Встреча", "group_name": "ИВ-23"}
+    client.post("/api/admin/events", json=payload)
+    with app.app_context():
+        notification = db.session.scalar(db.select(Notification).where(Notification.kind == "event_created"))
+        assert f"open_day={date.today().isoformat()}" in notification.target_url

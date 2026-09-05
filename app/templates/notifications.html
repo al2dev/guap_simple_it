@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Уведомления — Student Dashboard{% endblock %}
 {% block content %}
-<main class="content-wrap narrow-wrap"><div class="page-heading"><a href="{{ url_for('main.dashboard') }}" class="back-link"><i class="bi bi-arrow-left"></i> Календарь</a><h1>Уведомления</h1><p>Упоминания и ответы одногруппников.</p></div>
+<main class="content-wrap narrow-wrap"><div class="page-heading"><a href="{{ url_for('main.dashboard') }}" class="back-link"><i class="bi bi-arrow-left"></i> Календарь</a><h1>Уведомления</h1><p>Все изменения и упоминания группы.</p></div>
   <section class="surface-card notification-page-list">
-  {% for item in notifications %}<button class="notification-row {{ '' if item.is_read else 'unread' }}" data-notification-id="{{ item.id }}" data-student-id="{{ item.student_id }}" data-date="{{ item.date.isoformat() }}"><span class="notification-icon"><i class="bi bi-chat-left-text"></i></span><span><strong>{{ item.actor.full_name if item.actor else 'Система' }}</strong><span>{{ item.text }}</span><small>{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</small></span><i class="bi bi-chevron-right ms-auto"></i></button>{% else %}<div class="empty-state"><i class="bi bi-bell-slash"></i><p>Уведомлений пока нет</p></div>{% endfor %}
+  {% for item in notifications %}<button class="notification-row {{ '' if item.is_read else 'unread' }}" data-notification-id="{{ item.id }}" data-target-url="{{ item.resolved_target_url }}"><span class="notification-icon"><i class="bi bi-bell"></i></span><span><strong>{{ item.actor.full_name if item.actor else 'Система' }}</strong><span>{{ item.text }}</span><small>{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}{% if item.read_at %} · просмотрено {{ item.read_at.strftime('%d.%m.%Y %H:%M') }}{% endif %}</small></span><i class="bi bi-chevron-right ms-auto"></i></button>{% else %}<div class="empty-state"><i class="bi bi-bell-slash"></i><p>Уведомлений пока нет</p></div>{% endfor %}
   </section>
 </main>
 {% endblock %}

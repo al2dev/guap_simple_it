@@ -5,6 +5,7 @@
   const count = document.querySelector('.notification-count');
   const toastContainer = document.querySelector('.toast-container');
   let knownActiveIds = new Set();
+  const syncVersions = {};
   const escape = value => String(value ?? '').replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
   const icons = {chat_mention:'bi-at',chat_reply:'bi-reply-fill',material_mention:'bi-chat-left-text',material_created:'bi-file-earmark-plus',material_deleted:'bi-file-earmark-x',subject_created:'bi-journal-plus',subject_deleted:'bi-journal-x',event_created:'bi-calendar-plus',event_updated:'bi-calendar-check',event_deleted:'bi-calendar-x',schedule_created:'bi-clock-history',schedule_updated:'bi-clock',schedule_deleted:'bi-calendar-minus'};
   const formatDate = value => new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
@@ -18,26 +19,28 @@
     document.querySelector('[data-active-count]')?.replaceChildren(document.createTextNode(value));
   }
 
-  function socketRequest(eventName, payload) {
-    return new Promise((resolve, reject) => {
-      if (!socket?.connected) return reject(new Error('Нет соединения с сервером'));
-      socket.timeout(6000).emit(eventName, payload, (error, response) => {
-        if (error || response?.error) reject(new Error('Сервер не ответил'));
-        else resolve(response);
-      });
-    });
-  }
-
   async function sync(status = 'active') {
     const list = lists[status];
     if (!list) return;
+    const version = syncVersions[status] = (syncVersions[status] || 0) + 1;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      const data = await socketRequest('notifications:sync', {status});
+      // Page navigation recreates the socket; the panel must work while it reconnects.
+      const response = await fetch(`/api/notifications?status=${encodeURIComponent(status)}`, {
+        cache: 'no-store', headers: {'Accept': 'application/json'}, signal: controller.signal,
+      });
+      if (!response.ok) throw new Error('Не удалось загрузить уведомления');
+      const data = await response.json();
+      if (version !== syncVersions[status]) return;
       updateCount(data.unread);
       list.innerHTML = render(data.notifications, status);
       if (status === 'active') knownActiveIds = new Set(data.notifications.map(item => item.id));
     } catch {
-      list.innerHTML = '<div class="p-3 text-danger small">Нет соединения для получения уведомлений</div>';
+      if (version !== syncVersions[status]) return;
+      list.innerHTML = `<div class="p-3 text-danger small">Не удалось загрузить уведомления. <button type="button" class="btn btn-sm btn-link" data-retry-notifications="${status}">Повторить</button></div>`;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -79,6 +82,8 @@
   document.querySelector('[data-notification-toggle]')?.addEventListener('click', () => { sync('active'); sync('history'); });
   document.querySelector('[data-bs-target="#notificationHistory"]')?.addEventListener('shown.bs.tab', () => sync('history'));
   document.addEventListener('click', async event => {
+    const retry = event.target.closest('[data-retry-notifications]');
+    if (retry) { sync(retry.dataset.retryNotifications); return; }
     const button = event.target.closest('[data-open-notification], [data-notification-id]');
     if (!button) return;
     const id = button.dataset.openNotification || button.dataset.notificationId;
@@ -104,6 +109,6 @@
     if (lists.active) lists.active.innerHTML = render([], 'active');
     sync('history');
   });
-  socket?.on('connect', () => sync('active'));
-  if (socket?.connected) sync('active');
+  socket?.on('connect', () => { sync('active'); sync('history'); });
+  sync('active');
 })();

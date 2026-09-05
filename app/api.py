@@ -9,7 +9,7 @@ from .extensions import db
 from .models import CellTag, Comment, Event, Notification, ScheduleItem, Tag, User, iso_date, iso_time, utcnow
 from .notifications import create_notifications, mark_read, mentioned_user_ids, notify_group, serialize_notification
 from .realtime import queue_socket_event, user_room
-from .services import parse_date, parse_time, valid_color
+from .services import parse_date, parse_time, unique_login, valid_color
 from .schedule_import import cancel_or_delete_schedule
 
 
@@ -275,6 +275,83 @@ def _admin_schedule_from_payload(item, data):
     item.type = str(data.get("type", "Занятие")).strip()[:40] or "Занятие"
     item.group_name = str(data.get("group_name", "")).strip()[:80] or None
     item.description = str(data.get("description", "")).strip()
+
+
+def _import_text(row, key, label, max_length=80):
+    value = str(row.get(key, "")).strip()
+    if not value:
+        raise ValueError(f"Не заполнено поле {label}")
+    if len(value) > max_length:
+        raise ValueError(f"Поле {label} длиннее {max_length} символов")
+    return value
+
+
+@bp.post("/admin/students/import")
+@login_required
+@admin_required
+def api_import_students():
+    """Create users from a JSON array while reporting errors per source row."""
+    payload = request.get_json(silent=True)
+    rows = payload.get("students") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        return json_error("Ожидается JSON-массив студентов")
+    if not rows:
+        return json_error("Массив студентов пуст")
+    if len(rows) > 500:
+        return json_error("За один запрос можно импортировать не более 500 студентов")
+
+    created, skipped, errors = [], [], []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            errors.append({"index": index, "error": "Запись должна быть JSON-объектом"})
+            continue
+        try:
+            first_name = _import_text(row, "name", "name")
+            last_name = _import_text(row, "surname", "surname")
+            group_name = _import_text(row, "group", "group")
+            password = str(row.get("pass", "")).strip()
+            if len(password) < 5 or len(password) > 128:
+                raise ValueError("Пароль должен содержать от 5 до 128 символов")
+            role = str(row.get("role", "student")).strip().upper()
+            if role not in {"STUDENT", "ADMIN"}:
+                raise ValueError("role должен быть student или admin")
+
+            existing = db.session.scalar(
+                db.select(User).where(
+                    func.lower(User.first_name) == first_name.lower(),
+                    func.lower(User.last_name) == last_name.lower(),
+                    func.lower(User.group_name) == group_name.lower(),
+                )
+            )
+            if existing:
+                skipped.append({"index": index, "id": existing.id, "login": existing.login, "reason": "Студент уже существует"})
+                continue
+
+            requested_login = str(row.get("login", "")).strip()
+            if requested_login:
+                if len(requested_login) > 80:
+                    raise ValueError("login длиннее 80 символов")
+                if db.session.scalar(db.select(User).where(func.lower(User.login) == requested_login.lower())):
+                    raise ValueError(f"Логин {requested_login} уже занят")
+                login = requested_login
+            else:
+                login = unique_login(last_name)
+
+            user = User(login=login, first_name=first_name, last_name=last_name, group_name=group_name, role=role)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.flush()
+            created.append({
+                "index": index, "id": user.id, "login": user.login, "name": user.first_name,
+                "surname": user.last_name, "group": user.group_name, "role": user.role.lower(),
+            })
+        except (TypeError, ValueError) as error:
+            errors.append({"index": index, "error": str(error)})
+
+    db.session.commit()
+    return jsonify(created=created, skipped=skipped, errors=errors, totals={
+        "received": len(rows), "created": len(created), "skipped": len(skipped), "errors": len(errors),
+    })
 
 
 @bp.post("/admin/events")

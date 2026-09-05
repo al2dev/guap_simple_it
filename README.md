@@ -162,8 +162,42 @@ location /socket.io/ {
 - `DELETE /api/admin/events/<id>`
 - `POST /api/admin/schedule`
 - `DELETE /api/admin/schedule/<id>`
+- `POST /api/admin/students/import`
 
 API требует активную сессию и CSRF-токен. Admin endpoints дополнительно проверяют роль. Студент не может изменить чужую ячейку; данные другой группы не выдаются.
+
+## Пакетный импорт студентов
+
+Подготовьте, например, файл `students.json` (это обычный JSON, поэтому ключи и строки должны быть в кавычках):
+
+```json
+[
+  {"name": "Ivan", "surname": "Ivanov", "login": "ivanov", "group": "8626B", "pass": "8626B", "role": "student"},
+  {"name": "Petr", "surname": "Petrov", "login": "petrov", "group": "8626B", "pass": "8626B", "role": "student"}
+]
+```
+
+Запустите импорт из корня проекта:
+
+```bash
+python scripts/import_students.py students.json --url https://example.ru --admin-login admin
+```
+
+Скрипт запросит пароль без отображения в терминале. Также можно задать `ADMIN_PASSWORD`, `ADMIN_LOGIN` и `SERVICE_URL` через переменные окружения. Логин студента генерируется из фамилии по тем же правилам, что и в админ-панели; при необходимости его можно явно передать полем `login`. Повторная запись с теми же именем, фамилией и группой пропускается.
+
+Функцию можно вызвать непосредственно из Python:
+
+```python
+from scripts.import_students import import_students
+
+result = import_students(
+    [{"name": "Ivan", "surname": "Ivanov", "login": "ivanov", "group": "8626B", "pass": "8626B", "role": "student"}],
+    base_url="http://127.0.0.1:5000",
+    admin_login="admin",
+    admin_password="change-me",
+)
+print(result)
+```
 
 ## Тесты
 

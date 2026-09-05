@@ -54,6 +54,35 @@ def test_admin_routes_and_event_api(client, app):
     assert client.delete(f"/api/admin/events/{event_id}").status_code == 204
 
 
+def test_admin_bulk_student_import(client, app):
+    login(client, "Ivanov", "ИВ-23")
+    assert client.post("/api/admin/students/import", json=[]).status_code == 403
+
+    client.post("/logout")
+    login(client, "admin", "change-me")
+    payload = [
+        {"name": "Petr", "surname": "Petrov", "group": "8626B", "pass": "8626B", "role": "student"},
+        {"name": "Anna", "surname": "Sidorova", "group": "8626B", "pass": "secret1", "role": "student", "login": "anna.test"},
+        {"name": "Bad", "surname": "Password", "group": "8626B", "pass": "123", "role": "student"},
+    ]
+    response = client.post("/api/admin/students/import", json=payload)
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result["totals"] == {"received": 3, "created": 2, "skipped": 0, "errors": 1}
+    assert result["created"][0]["login"] == "Petrov"
+    assert result["created"][1]["login"] == "anna.test"
+
+    with app.app_context():
+        imported = db.session.scalar(db.select(User).where(User.login == "Petrov"))
+        assert imported.group_name == "8626B"
+        assert imported.role == "STUDENT"
+        assert imported.check_password("8626B")
+
+    duplicate = client.post("/api/admin/students/import", json=[payload[0]]).get_json()
+    assert duplicate["totals"]["created"] == 0
+    assert duplicate["totals"]["skipped"] == 1
+
+
 def test_student_cannot_access_admin(client):
     login(client, "Ivanov", "ИВ-23")
     assert client.get("/admin").status_code == 403

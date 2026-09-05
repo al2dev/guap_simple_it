@@ -163,14 +163,16 @@
       startX = event.clientX;
       startScrollLeft = scroll.scrollLeft;
       dragged = false;
-      scroll.setPointerCapture(pointerId);
     });
     scroll.addEventListener('pointermove', event => {
       if (event.pointerId !== pointerId) return;
       const distance = event.clientX - startX;
       if (!dragged && Math.abs(distance) < 5) return;
-      dragged = true;
-      scroll.classList.add('is-dragging');
+      if (!dragged) {
+        dragged = true;
+        scroll.setPointerCapture(pointerId);
+        scroll.classList.add('is-dragging');
+      }
       scroll.scrollLeft = startScrollLeft - distance;
       event.preventDefault();
     });
